@@ -1,0 +1,100 @@
+import type { SkillsRegistry } from "./registry.js";
+import type { CodexSkill, TriggerType } from "./schema.js";
+
+export interface MockExecutionOptions {
+  trigger?: TriggerType;
+  repository?: string;
+  actor?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface MockWebhookEvent {
+  id: string;
+  trigger: TriggerType;
+  repository: string;
+  actor: string;
+  payload: Record<string, unknown>;
+}
+
+export interface MockExecutionResult {
+  success: boolean;
+  skill: CodexSkill;
+  event: MockWebhookEvent;
+  logs: string[];
+}
+
+/**
+ * Creates a deterministic mock maintainer event for smoke tests and demos.
+ *
+ * @param skill - Skill being exercised.
+ * @param options - Optional event overrides.
+ * @returns Mock webhook-like event.
+ */
+export function createMockEvent(skill: CodexSkill, options: MockExecutionOptions = {}): MockWebhookEvent {
+  const trigger = options.trigger ?? skill.triggers[0] ?? "manual";
+
+  return {
+    id: `mock-${trigger}-${skill.name}`,
+    trigger,
+    repository: options.repository ?? "example/repository",
+    actor: options.actor ?? "codex-bot",
+    payload: {
+      title: defaultTitleForTrigger(trigger),
+      number: trigger === "release" ? undefined : 42,
+      ...options.payload
+    }
+  };
+}
+
+/**
+ * Simulates execution of a skill without invoking arbitrary local code. The
+ * mock executor proves routing and metadata are correct while staying safe for
+ * CI and untrusted community contributions.
+ *
+ * @param registry - Registry containing the target skill.
+ * @param skillName - Skill to simulate.
+ * @param options - Mock event overrides.
+ * @returns Execution result with terminal-friendly logs.
+ */
+export async function executeMockSkill(
+  registry: SkillsRegistry,
+  skillName: string,
+  options: MockExecutionOptions = {}
+): Promise<MockExecutionResult> {
+  const skill = registry.getSkill(skillName);
+  if (!skill) {
+    throw new Error(`Skill '${skillName}' is not registered.`);
+  }
+
+  const event = createMockEvent(skill, options);
+  const logs = [
+    `[mock] ${skill.name} accepted a ${event.trigger} event from ${event.repository}.`,
+    `[mock] actor=${event.actor} event_id=${event.id}`,
+    `[mock] handler=${skill.entryPoint ?? "instruction-only SKILL.md"}`,
+    `[mock] completed without executing arbitrary code.`
+  ];
+
+  return {
+    success: true,
+    skill,
+    event,
+    logs
+  };
+}
+
+function defaultTitleForTrigger(trigger: TriggerType): string {
+  switch (trigger) {
+    case "issue":
+      return "Bug: intermittent test failure on Windows";
+    case "pr":
+      return "Add retry handling to release workflow";
+    case "release":
+      return "v0.1.0";
+    case "security":
+      return "Dependency audit requires maintainer review";
+    case "dependency":
+      return "Update transitive dependency policy";
+    case "manual":
+      return "Manual maintainer workflow run";
+  }
+}

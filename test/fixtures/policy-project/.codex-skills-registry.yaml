@@ -1,0 +1,6 @@
+requirePinnedMcpPackages: true
+allowedMcpCommands:
+  - node
+  - npx
+requireExplicitMcpToolPolicy: true
+requirePluginSkillPaths: true

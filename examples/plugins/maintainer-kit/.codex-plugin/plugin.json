@@ -1,0 +1,24 @@
+{
+  "name": "maintainer-kit",
+  "version": "0.1.0",
+  "description": "Reusable Codex workflows for common open-source maintainer tasks.",
+  "author": {
+    "name": "codex-skills-registry contributors"
+  },
+  "license": "MIT",
+  "keywords": ["codex", "skills", "maintainer", "oss"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Maintainer Kit",
+    "shortDescription": "Issue triage, PR review, and release workflows for maintainers.",
+    "developerName": "codex-skills-registry contributors",
+    "category": "Productivity",
+    "capabilities": ["Read"],
+    "defaultPrompt": [
+      "Use Maintainer Kit to triage this issue.",
+      "Use Maintainer Kit to review this pull request."
+    ],
+    "brandColor": "#10A37F"
+  }
+}

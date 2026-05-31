@@ -1,0 +1,10 @@
+requirePinnedMcpPackages: true
+allowedMcpCommands:
+  - node
+  - python
+  - uvx
+allowedRemoteMcpHosts:
+  - example.com
+requireExplicitMcpToolPolicy: true
+requirePluginSkillPaths: true
+failOnWarnings: false

@@ -1,0 +1,119 @@
+name: Codex Skills Registry
+description: Validate Codex Skills, plugin manifests, and MCP server configs in CI.
+
+inputs:
+  path:
+    description: Project directory to inspect.
+    required: false
+    default: .
+  command:
+    description: CLI command to run. Supported values are doctor, validate, list, audit, and export.
+    required: false
+    default: doctor
+  include-examples:
+    description: Include bundled example skills from this action repository.
+    required: false
+    default: "false"
+  config:
+    description: Optional JSON/YAML skill config path, relative to path.
+    required: false
+    default: ""
+  policy:
+    description: Optional registry policy file path, relative to path.
+    required: false
+    default: ""
+  format:
+    description: CLI output format. Supported values are text and json.
+    required: false
+    default: text
+  strict:
+    description: Enable strict audit behavior for doctor or audit.
+    required: false
+    default: "false"
+
+outputs:
+  index-path:
+    description: Path to the exported registry index when command is export.
+    value: ${{ steps.run.outputs.index-path }}
+  sarif-path:
+    description: Path to the SARIF file when format is sarif.
+    value: ${{ steps.run.outputs.sarif-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install action dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_ACTION_PATH"
+        npm ci
+        npm run build
+
+    - name: Run codex-skills
+      id: run
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_ACTION_PATH"
+
+        target_path="${{ inputs.path }}"
+        if [[ "$target_path" != /* ]]; then
+          target_path="$GITHUB_WORKSPACE/$target_path"
+        fi
+
+        args=(--cwd "$target_path")
+        if [[ "${{ inputs.include-examples }}" != "true" ]]; then
+          args+=(--no-examples)
+        fi
+        if [[ -n "${{ inputs.config }}" ]]; then
+          args+=(--config "${{ inputs.config }}")
+        fi
+        if [[ -n "${{ inputs.policy }}" ]]; then
+          args+=(--policy "${{ inputs.policy }}")
+        fi
+        args+=(--format "${{ inputs.format }}" --github-annotations)
+
+        strict_args=()
+        if [[ "${{ inputs.strict }}" == "true" ]]; then
+          strict_args+=(--strict)
+        fi
+        sarif_file="$target_path/codex-skills-registry.sarif"
+        run_sarif_or_text() {
+          local subcommand="$1"
+          shift
+          if [[ "${{ inputs.format }}" == "sarif" ]]; then
+            set +e
+            node dist/cli.js "${args[@]}" "$subcommand" "$@" > "$sarif_file"
+            local status=$?
+            set -e
+            echo "sarif-path=$sarif_file" >> "$GITHUB_OUTPUT"
+            exit "$status"
+          fi
+
+          node dist/cli.js "${args[@]}" "$subcommand" "$@"
+        }
+
+        case "${{ inputs.command }}" in
+          doctor)
+            run_sarif_or_text doctor "${strict_args[@]}"
+            ;;
+          validate)
+            run_sarif_or_text validate
+            ;;
+          list)
+            node dist/cli.js "${args[@]}" list
+            ;;
+          audit)
+            run_sarif_or_text audit "${strict_args[@]}"
+            ;;
+          export)
+            out_file="$target_path/codex-skills-registry-index.json"
+            node dist/cli.js "${args[@]}" export --out codex-skills-registry-index.json
+            echo "index-path=$out_file" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "Unsupported command: ${{ inputs.command }}" >&2
+            exit 2
+            ;;
+        esac

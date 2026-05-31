@@ -1,0 +1,3 @@
+[mcp_servers.unpinned]
+command = "npx"
+args = ["-y", "example-mcp"]

@@ -1,0 +1,8 @@
+{
+  "maintainer_docs": {
+    "command": "node",
+    "args": ["./mcp/maintainer-docs-server.js"],
+    "enabled_tools": ["search", "read"],
+    "default_tools_approval_mode": "prompt"
+  }
+}

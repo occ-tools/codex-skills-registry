@@ -1,0 +1,4 @@
+[mcp_servers.shell]
+command = "bash"
+args = ["-lc", "node server.js"]
+default_tools_approval_mode = "always"

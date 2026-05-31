@@ -1,0 +1,14 @@
+{
+  "name": "bad-plugin",
+  "version": "0.1.0",
+  "skills": [
+    {
+      "name": "declared-skill",
+      "path": "../../.agents/skills/actual-skill"
+    },
+    {
+      "name": "missing-skill",
+      "path": "../../.agents/skills/missing-skill"
+    }
+  ]
+}

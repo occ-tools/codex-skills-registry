@@ -1,0 +1,7 @@
+interface:
+  display_name: "Issue Triage"
+  short_description: "Classify issues and draft maintainer responses."
+  brand_color: "#2563EB"
+  default_prompt: "Triage this issue for maintainer action."
+policy:
+  allow_implicit_invocation: true
