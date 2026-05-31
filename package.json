@@ -5,6 +5,14 @@
   "type": "module",
   "license": "MIT",
   "author": "codex-skills-registry contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wangjiehu/codex-skills-registry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wangjiehu/codex-skills-registry/issues"
+  },
+  "homepage": "https://github.com/wangjiehu/codex-skills-registry#readme",
   "keywords": [
     "codex",
     "openai",
