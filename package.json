@@ -67,15 +67,15 @@
     "validate": "npm run build && npm test"
   },
   "dependencies": {
-    "commander": "^14.0.2",
+    "commander": "^15.0.0",
     "smol-toml": "^1.4.2",
     "yaml": "^2.8.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.9.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.0.14"
   },
   "engines": {
