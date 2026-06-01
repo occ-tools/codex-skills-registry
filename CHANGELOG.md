@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - Include discovery diagnostics in `validate` and `audit` command failures.
 - Report missing explicit policy files instead of silently using defaults.

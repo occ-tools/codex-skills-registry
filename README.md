@@ -231,7 +231,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.1.0
+      - uses: wangjiehu/codex-skills-registry@v0.1.1
         with:
           path: .
           command: doctor
@@ -248,7 +248,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.1.0
+  uses: wangjiehu/codex-skills-registry@v0.1.1
   continue-on-error: true
   with:
     path: .
