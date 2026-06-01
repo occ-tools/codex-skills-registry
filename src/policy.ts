@@ -53,6 +53,21 @@ export async function loadRegistryPolicy(
   const sourcePath = await firstExistingPath(candidates);
 
   if (!sourcePath) {
+    if (policyFile) {
+      const resolvedPath = path.resolve(cwd, policyFile);
+      return {
+        policy: DEFAULT_POLICY,
+        sourcePath: resolvedPath,
+        diagnostics: [
+          {
+            severity: "error",
+            path: resolvedPath,
+            message: "Policy file does not exist."
+          }
+        ]
+      };
+    }
+
     return {
       policy: DEFAULT_POLICY,
       diagnostics: []

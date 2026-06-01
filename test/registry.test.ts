@@ -29,5 +29,26 @@ describe("SkillsRegistry", () => {
 
     expect(diagnostics.some((issue) => issue.message.includes("but SKILL.md declares"))).toBe(true);
     expect(diagnostics.some((issue) => issue.message.includes("is invalid"))).toBe(true);
+    expect(diagnostics.some((issue) => issue.message.includes("must stay inside"))).toBe(true);
+  });
+
+  it("rejects entry points that escape a discovered skill directory during validation", async () => {
+    const registry = new SkillsRegistry();
+    registry.registerSkill({
+      name: "escaped-entry",
+      description: "A test skill with an entry point that escapes the skill directory.",
+      version: "0.1.0",
+      triggers: ["manual"],
+      entryPoint: "../outside.js",
+      rootDir: process.cwd(),
+      source: "inline",
+      tags: [],
+      metadata: {}
+    });
+
+    const validation = await registry.validateSkillByName("escaped-entry");
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toContain("escaped-entry.entryPoint");
   });
 });

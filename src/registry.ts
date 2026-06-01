@@ -218,14 +218,22 @@ export class SkillsRegistry {
 
     if (skill.entryPoint && skill.rootDir) {
       const entryPath = path.resolve(skill.rootDir, skill.entryPoint);
-      try {
-        await access(entryPath);
-      } catch {
+      if (path.isAbsolute(skill.entryPoint) || !isSubpath(skill.rootDir, entryPath)) {
         issues.push({
           severity: "error",
-          path: entryPath,
-          message: "Configured entryPoint does not exist."
+          path: `${skill.name}.entryPoint`,
+          message: "Configured entryPoint must be relative and stay inside the skill directory."
         });
+      } else {
+        try {
+          await access(entryPath);
+        } catch {
+          issues.push({
+            severity: "error",
+            path: entryPath,
+            message: "Configured entryPoint does not exist."
+          });
+        }
       }
     }
 
@@ -378,6 +386,16 @@ export class SkillsRegistry {
         }
 
         const skillPath = path.resolve(plugin.rootDir, reference.path);
+        if (!isSubpath(plugin.rootDir, skillPath)) {
+          this.diagnostics.push({
+            severity: "error",
+            path: `${plugin.sourcePath}.skills.${index}.path`,
+            file: plugin.sourcePath,
+            message: "Plugin skill path must stay inside the plugin root."
+          });
+          continue;
+        }
+
         const skillFile = path.join(skillPath, "SKILL.md");
 
         try {

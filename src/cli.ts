@@ -180,18 +180,31 @@ async function handleValidate(
       name: skillName,
       ...result
     }));
+    const diagnostics = registry.listDiagnostics();
     const issues = resultList.flatMap((result) => result.issues);
-    const hasErrors = resultList.some((result) => !result.valid);
+    const allIssues = [...diagnostics, ...issues];
+    const hasErrors =
+      resultList.some((result) => !result.valid) ||
+      diagnostics.some((issue) => issue.severity === "error");
 
     if (outputOptions.githubAnnotations) {
-      emitGithubAnnotations(issues);
+      emitGithubAnnotations(allIssues);
     }
 
     if (outputOptions.format === "sarif") {
-      writeJson(createSarifLog(issues));
+      writeJson(createSarifLog(allIssues));
     } else if (outputOptions.format === "json") {
-      writeJson({ results: resultList });
+      writeJson({ diagnostics, results: resultList });
     } else {
+      if (diagnostics.length > 0) {
+        console.log("Diagnostics:");
+        console.log(formatValidationIssues(diagnostics));
+      }
+
+      if (resultList.length === 0 && diagnostics.length === 0) {
+        console.log("No registered skills to validate.");
+      }
+
       for (const result of resultList) {
         console.log(`${result.name}: ${result.valid ? "valid" : "invalid"}`);
         if (result.issues.length > 0) {
@@ -207,21 +220,28 @@ async function handleValidate(
   }
 
   const result = await registry.validateSkillByName(name);
+  const diagnostics = registry.listDiagnostics();
+  const allIssues = [...diagnostics, ...result.issues];
 
   if (outputOptions.githubAnnotations) {
-    emitGithubAnnotations(result.issues);
+    emitGithubAnnotations(allIssues);
   }
 
   if (outputOptions.format === "sarif") {
-    writeJson(createSarifLog(result.issues));
+    writeJson(createSarifLog(allIssues));
   } else if (outputOptions.format === "json") {
-    writeJson({ name, ...result });
+    writeJson({ name, ...result, diagnostics });
   } else {
+    if (diagnostics.length > 0) {
+      console.log("Diagnostics:");
+      console.log(formatValidationIssues(diagnostics));
+    }
+
     console.log(`${name}: ${result.valid ? "valid" : "invalid"}`);
     console.log(formatValidationIssues(result.issues));
   }
 
-  if (!result.valid) {
+  if (!result.valid || diagnostics.some((issue) => issue.severity === "error")) {
     process.exitCode = 1;
   }
 }
@@ -319,7 +339,9 @@ async function handleAudit(
   outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const issues = registry.audit({ strict: auditOptions.strict });
+  const diagnostics = registry.listDiagnostics();
+  const auditIssues = registry.audit({ strict: auditOptions.strict });
+  const issues = [...diagnostics, ...auditIssues];
 
   if (outputOptions.githubAnnotations) {
     emitGithubAnnotations(issues);
@@ -329,12 +351,25 @@ async function handleAudit(
     writeJson(createSarifLog(issues));
   } else if (outputOptions.format === "json") {
     writeJson({
-      issues,
+      diagnostics,
+      issues: auditIssues,
       policy: registry.getPolicy(),
       policyPath: registry.getPolicyPath()
     });
   } else {
-    console.log(formatValidationIssues(issues));
+    if (diagnostics.length > 0) {
+      console.log("Diagnostics:");
+      console.log(formatValidationIssues(diagnostics));
+    }
+
+    if (auditIssues.length > 0) {
+      if (diagnostics.length > 0) {
+        console.log("\nAudit:");
+      }
+      console.log(formatValidationIssues(auditIssues));
+    } else if (diagnostics.length === 0) {
+      console.log(formatValidationIssues(auditIssues));
+    }
   }
 
   if (shouldFail(issues, registry.getPolicy())) {

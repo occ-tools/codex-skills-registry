@@ -53,36 +53,44 @@ runs:
     - name: Run codex-skills
       id: run
       shell: bash
+      env:
+        REGISTRY_INPUT_PATH: ${{ inputs.path }}
+        REGISTRY_INPUT_COMMAND: ${{ inputs.command }}
+        REGISTRY_INPUT_INCLUDE_EXAMPLES: ${{ inputs.include-examples }}
+        REGISTRY_INPUT_CONFIG: ${{ inputs.config }}
+        REGISTRY_INPUT_POLICY: ${{ inputs.policy }}
+        REGISTRY_INPUT_FORMAT: ${{ inputs.format }}
+        REGISTRY_INPUT_STRICT: ${{ inputs.strict }}
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
 
-        target_path="${{ inputs.path }}"
+        target_path="$REGISTRY_INPUT_PATH"
         if [[ "$target_path" != /* ]]; then
           target_path="$GITHUB_WORKSPACE/$target_path"
         fi
 
         args=(--cwd "$target_path")
-        if [[ "${{ inputs.include-examples }}" != "true" ]]; then
+        if [[ "$REGISTRY_INPUT_INCLUDE_EXAMPLES" != "true" ]]; then
           args+=(--no-examples)
         fi
-        if [[ -n "${{ inputs.config }}" ]]; then
-          args+=(--config "${{ inputs.config }}")
+        if [[ -n "$REGISTRY_INPUT_CONFIG" ]]; then
+          args+=(--config "$REGISTRY_INPUT_CONFIG")
         fi
-        if [[ -n "${{ inputs.policy }}" ]]; then
-          args+=(--policy "${{ inputs.policy }}")
+        if [[ -n "$REGISTRY_INPUT_POLICY" ]]; then
+          args+=(--policy "$REGISTRY_INPUT_POLICY")
         fi
-        args+=(--format "${{ inputs.format }}" --github-annotations)
+        args+=(--format "$REGISTRY_INPUT_FORMAT" --github-annotations)
 
         strict_args=()
-        if [[ "${{ inputs.strict }}" == "true" ]]; then
+        if [[ "$REGISTRY_INPUT_STRICT" == "true" ]]; then
           strict_args+=(--strict)
         fi
         sarif_file="$target_path/codex-skills-registry.sarif"
         run_sarif_or_text() {
           local subcommand="$1"
           shift
-          if [[ "${{ inputs.format }}" == "sarif" ]]; then
+          if [[ "$REGISTRY_INPUT_FORMAT" == "sarif" ]]; then
             set +e
             node dist/cli.js "${args[@]}" "$subcommand" "$@" > "$sarif_file"
             local status=$?
@@ -94,7 +102,7 @@ runs:
           node dist/cli.js "${args[@]}" "$subcommand" "$@"
         }
 
-        case "${{ inputs.command }}" in
+        case "$REGISTRY_INPUT_COMMAND" in
           doctor)
             run_sarif_or_text doctor "${strict_args[@]}"
             ;;
@@ -113,7 +121,7 @@ runs:
             echo "index-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           *)
-            echo "Unsupported command: ${{ inputs.command }}" >&2
+            echo "Unsupported command: $REGISTRY_INPUT_COMMAND" >&2
             exit 2
             ;;
         esac

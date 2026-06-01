@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Include discovery diagnostics in `validate` and `audit` command failures.
+- Report missing explicit policy files instead of silently using defaults.
+- Tighten skill entry point and plugin skill path boundary checks.
+- Harden the reusable GitHub Action by passing inputs through environment variables.
+- Update roadmap status to match implemented v0.1 features.
+
 ## 0.1.0
 
 - Add CLI and SDK for discovering Codex Skills, plugin manifests, and MCP server config.

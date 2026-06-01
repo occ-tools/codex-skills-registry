@@ -499,7 +499,8 @@ export async function discoverPluginMcpServers(
  * @returns Frontmatter object and markdown body.
  */
 export function parseSkillMarkdown(markdown: string): ParsedSkillMarkdown {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
+  const normalizedMarkdown = markdown.replace(/^\uFEFF/, "");
+  const match = normalizedMarkdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) {
     throw new Error("SKILL.md must start with YAML frontmatter delimited by ---.");
   }

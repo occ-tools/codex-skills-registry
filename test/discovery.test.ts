@@ -15,6 +15,18 @@ description: Triage GitHub issues for maintainers and identify next actions.
     expect(parsed.body).toContain("# Body");
   });
 
+  it("parses SKILL.md frontmatter with a UTF-8 BOM", () => {
+    const parsed = parseSkillMarkdown(`\uFEFF---
+name: bom-skill
+description: Validate a skill file that was saved with a byte order mark.
+---
+
+# Body
+`);
+
+    expect(parsed.frontmatter.name).toBe("bom-skill");
+  });
+
   it("discovers bundled examples", async () => {
     const result = await discoverProject({ cwd: process.cwd(), includeExamples: true });
 

@@ -4,11 +4,15 @@
   "skills": [
     {
       "name": "declared-skill",
-      "path": "../../.agents/skills/actual-skill"
+      "path": "./skills/actual-skill"
     },
     {
       "name": "missing-skill",
-      "path": "../../.agents/skills/missing-skill"
+      "path": "./skills/missing-skill"
+    },
+    {
+      "name": "escaped-skill",
+      "path": "../../.agents/skills/actual-skill"
     }
   ]
 }

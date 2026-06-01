@@ -60,6 +60,24 @@ describe("CLI", () => {
     expect(parsed.skills.map((skill) => skill.name)).toContain("issue-triage");
   });
 
+  it("fails validate when discovery diagnostics are present", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "validate"
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("Diagnostics:");
+    expect(output).toContain("SKILL.md");
+    expect(process.exitCode).toBe(1);
+  });
+
   it("reports strict audit errors for risky fixtures", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 

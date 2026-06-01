@@ -18,6 +18,14 @@ describe("policy", () => {
     expect(loaded.diagnostics).toHaveLength(0);
   });
 
+  it("reports an error when an explicit policy file is missing", async () => {
+    const loaded = await loadRegistryPolicy(fixtureRoot, "missing-policy.yaml");
+
+    expect(loaded.diagnostics).toHaveLength(1);
+    expect(loaded.diagnostics[0]?.severity).toBe("error");
+    expect(loaded.diagnostics[0]?.message).toContain("does not exist");
+  });
+
   it("applies policy to MCP audit rules", async () => {
     const registry = await SkillsRegistry.load({
       cwd: fixtureRoot,
