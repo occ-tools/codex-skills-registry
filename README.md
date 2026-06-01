@@ -15,6 +15,20 @@ by OpenAI.
 The project focuses on maintainer workflows: issue triage, pull request review,
 release notes, dependency review, and security-oriented automation.
 
+## Highlights
+
+- Codex-oriented registry for Skills, plugin manifests, and MCP server config.
+- CI-friendly validation for `SKILL.md` frontmatter, plugin paths, and project
+  policy.
+- Safety audit rules for risky entry points, shell-based MCP servers, unpinned
+  packages, broad tool exposure, and potential secret literals.
+- Safe mock execution for issue, pull request, release, dependency, security,
+  and manual maintainer workflows.
+- JSON, SARIF, and GitHub Actions annotation output for automation and code
+  scanning integrations.
+- Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
+  source repositories.
+
 ## Status
 
 This is an early v0.1 project. It validates, indexes, audits, and mock-runs
