@@ -312,6 +312,15 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.1.0` is pushed. Configure
-the repository secret `NPM_TOKEN`; the release workflow publishes with npm
-provenance enabled.
+Automated releases run when a semver tag such as `v0.1.0` is pushed.
+Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
+long-lived token:
+
+- package: `@wangjiehu/codex-skills-registry`
+- owner: `wangjiehu`
+- repository: `codex-skills-registry`
+- workflow file: `release.yml`
+- allowed action: `npm publish`
+
+Trusted publishing uses GitHub Actions OIDC and automatically generates npm
+provenance for public packages.
