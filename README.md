@@ -1,5 +1,10 @@
 # codex-skills-registry
 
+[![Validate](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/validate.yml/badge.svg)](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/validate.yml)
+[![CodeQL](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/codeql.yml/badge.svg)](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/codeql.yml)
+[![npm](https://img.shields.io/npm/v/%40wangjiehu%2Fcodex-skills-registry.svg)](https://www.npmjs.com/package/@wangjiehu/codex-skills-registry)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `codex-skills-registry` is a small TypeScript CLI and SDK for open-source
 maintainers who want to validate, index, and safely test Codex Skills, plugin
 manifests, and MCP server configuration before they become part of a repository.
@@ -36,6 +41,24 @@ This registry gives maintainers a CI-friendly surface:
 - export a JSON index for docs, CI artifacts, or future registry services
 
 ## Quick start
+
+Requires Node.js 20 or newer.
+
+Run the CLI from npm:
+
+```bash
+npx @wangjiehu/codex-skills-registry@latest doctor
+npx @wangjiehu/codex-skills-registry@latest list
+```
+
+Or install the `codex-skills` binary globally:
+
+```bash
+npm install -g @wangjiehu/codex-skills-registry
+codex-skills doctor
+```
+
+From a local checkout:
 
 ```bash
 npm install
@@ -193,8 +216,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: your-org/codex-skills-registry@v0.1.0
+      - uses: actions/checkout@v6
+      - uses: wangjiehu/codex-skills-registry@v0.1.0
         with:
           path: .
           command: doctor
@@ -211,13 +234,13 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: your-org/codex-skills-registry@v0.1.0
+  uses: wangjiehu/codex-skills-registry@v0.1.0
   continue-on-error: true
   with:
     path: .
     command: doctor
     format: sarif
-- uses: github/codeql-action/upload-sarif@v3
+- uses: github/codeql-action/upload-sarif@v4
   if: always() && steps.codex-skills.outputs.sarif-path != ''
   with:
     sarif_file: ${{ steps.codex-skills.outputs.sarif-path }}
@@ -232,7 +255,7 @@ GitHub Action captures SARIF to `codex-skills-registry.sarif`.
 ## SDK
 
 ```ts
-import { SkillsRegistry, executeMockSkill } from "codex-skills-registry";
+import { SkillsRegistry, executeMockSkill } from "@wangjiehu/codex-skills-registry";
 
 const registry = await SkillsRegistry.load({ cwd: process.cwd() });
 console.log(registry.formatSkillsTable());
@@ -252,3 +275,29 @@ npm run pack:check
 
 The GitHub Actions workflow runs install, build, test, CLI smoke tests, and a
 smoke test of the reusable action.
+
+## Release
+
+The package is configured as the public scoped package
+`@wangjiehu/codex-skills-registry`. Before the first npm release, confirm the
+publishing account owns the `@wangjiehu` npm scope.
+
+Local release check:
+
+```bash
+npm run release:check
+```
+
+Manual npm publish:
+
+```bash
+npm login
+npm publish --access public
+```
+
+`npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
+local publish cannot skip build, tests, and dry-run packaging by accident.
+
+Automated releases run when a semver tag such as `v0.1.0` is pushed. Configure
+the repository secret `NPM_TOKEN`; the release workflow publishes with npm
+provenance enabled.

@@ -23,7 +23,7 @@ inputs:
     required: false
     default: ""
   format:
-    description: CLI output format. Supported values are text and json.
+    description: CLI output format. Supported values are text, json, and sarif.
     required: false
     default: text
   strict:

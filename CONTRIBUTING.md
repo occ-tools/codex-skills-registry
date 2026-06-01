@@ -2,7 +2,13 @@
 
 Thanks for helping make Codex automation easier to review and reuse.
 
+Please follow the project code of conduct in all issues, discussions, and pull
+requests.
+
 ## Development setup
+
+Use Node.js 20 or newer. The release workflow currently publishes with Node.js
+24.
 
 ```bash
 npm install
@@ -46,8 +52,8 @@ npm run validate
 
 ## Release checklist
 
-- `npm run validate`
-- `npm run build`
-- `npm run pack:check`
+- `npm run release:check`
 - update `CHANGELOG.md` when one exists
-- tag using semver
+- confirm the npm package scope is correct for the publishing account
+- create a semver tag such as `v0.1.0`
+- push the tag to trigger the release workflow, or publish manually with `npm publish --access public`

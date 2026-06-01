@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
@@ -9,7 +10,8 @@ import { SkillsRegistry, formatValidationIssues, type RegistryLoadOptions } from
 import { createSarifLog } from "./sarif.js";
 import { TriggerTypeSchema, type TriggerType, type ValidationIssue } from "./schema.js";
 
-const VERSION = "0.1.0";
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require("../package.json") as { version: string };
 
 interface CliLoadOptions extends RegistryLoadOptions {
   examples?: boolean;

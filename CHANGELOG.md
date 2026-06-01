@@ -9,3 +9,6 @@
 - Add audit checks for risky MCP and skill patterns.
 - Add JSON, SARIF, and GitHub Actions annotation output.
 - Add a reusable GitHub Action and example maintainer workflow plugin.
+- Add scoped npm package metadata, publish guards, and publish-ready docs.
+- Add validation, release, Dependabot, CodeQL, and dependency review workflows for repository maintenance.
+- Add project ownership and conduct files for a cleaner open-source contribution surface.

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.npm-cache/
 registry-index.json
 codex-skills-registry.sarif
 .env
