@@ -1,6 +1,10 @@
 import path from "node:path";
 import type { ValidationIssue } from "./schema.js";
 
+export interface SarifOptions {
+  cwd?: string;
+}
+
 interface SarifResult {
   ruleId: string;
   level: "error" | "warning" | "note";
@@ -25,18 +29,23 @@ interface SarifResult {
  * without parsing terminal text.
  *
  * @param issues - Registry issues to convert.
+ * @param options - Output options such as repository root path.
  * @returns SARIF log object.
  */
-export function createSarifLog(issues: ValidationIssue[]): Record<string, unknown> {
+export function createSarifLog(
+  issues: ValidationIssue[],
+  options: SarifOptions = {}
+): Record<string, unknown> {
   const rules = new Map<string, { id: string; name: string; shortDescription: { text: string } }>();
   const results: SarifResult[] = issues.map((issue) => {
-    const ruleId = ruleIdForIssue(issue);
+    const ruleName = ruleNameForIssue(issue, options.cwd);
+    const ruleId = ruleIdForIssue(ruleName);
     if (!rules.has(ruleId)) {
       rules.set(ruleId, {
         id: ruleId,
-        name: issue.path,
+        name: ruleName,
         shortDescription: {
-          text: issue.path
+          text: ruleName
         }
       });
     }
@@ -52,12 +61,12 @@ export function createSarifLog(issues: ValidationIssue[]): Record<string, unknow
         ? {
             locations: [
               {
-                physicalLocation: {
-                  artifactLocation: {
-                    uri: toSarifUri(file)
+                  physicalLocation: {
+                    artifactLocation: {
+                    uri: toSarifUri(file, options.cwd)
                   },
                   region: {
-                    startLine: 1
+                    startLine: issueLine(issue)
                   }
                 }
               }
@@ -85,8 +94,17 @@ export function createSarifLog(issues: ValidationIssue[]): Record<string, unknow
   };
 }
 
-function ruleIdForIssue(issue: ValidationIssue): string {
-  return issue.path
+function ruleNameForIssue(issue: ValidationIssue, cwd?: string): string {
+  if (!issue.file || !cwd || !path.isAbsolute(issue.file)) {
+    return issue.path;
+  }
+
+  const relativeFile = relativePathInside(path.resolve(cwd), path.resolve(issue.file));
+  return relativeFile ? issue.path.replace(issue.file, relativeFile.replace(/\\/g, "/")) : issue.path;
+}
+
+function ruleIdForIssue(ruleName: string): string {
+  return ruleName
     .replace(/^[A-Za-z]:[\\/]/, "")
     .replace(/[^A-Za-z0-9._-]+/g, ".")
     .replace(/^\.+|\.+$/g, "")
@@ -94,10 +112,28 @@ function ruleIdForIssue(issue: ValidationIssue): string {
 }
 
 function issueFile(issue: ValidationIssue): string | undefined {
-  const candidate = (issue as ValidationIssue & { file?: unknown }).file;
+  const candidate = issue.file;
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-function toSarifUri(filePath: string): string {
+function issueLine(issue: ValidationIssue): number {
+  return typeof issue.line === "number" && Number.isInteger(issue.line) && issue.line > 0
+    ? issue.line
+    : 1;
+}
+
+function toSarifUri(filePath: string, cwd?: string): string {
+  if (cwd && path.isAbsolute(filePath)) {
+    const relative = relativePathInside(path.resolve(cwd), path.resolve(filePath));
+    if (relative) {
+      return relative.replace(/\\/g, "/");
+    }
+  }
+
   return path.normalize(filePath).replace(/\\/g, "/");
+}
+
+function relativePathInside(root: string, candidate: string): string | undefined {
+  const relative = path.relative(root, candidate);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : undefined;
 }

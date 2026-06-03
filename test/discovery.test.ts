@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discoverProject, parseSkillMarkdown } from "../src/discovery.js";
+import { discoverPluginMcpServers, discoverProject, parseSkillMarkdown } from "../src/discovery.js";
 
 describe("discovery", () => {
   it("parses SKILL.md frontmatter", () => {
@@ -51,6 +51,53 @@ description: Validate a skill file that was saved with a byte order mark.
 
     expect(result.skills).toHaveLength(0);
     expect(result.diagnostics.some((issue) => issue.severity === "error")).toBe(true);
+    expect(result.diagnostics.find((issue) => issue.path.endsWith(".name"))?.line).toBe(2);
+    expect(result.diagnostics.find((issue) => issue.path.endsWith(".description"))?.line).toBe(3);
+  });
+
+  it("records source line hints for discovered MCP server configs", async () => {
+    const result = await discoverProject({
+      cwd: "test/fixtures/invalid-project",
+      includeExamples: false
+    });
+
+    const server = result.mcpServers.find((candidate) => candidate.name === "shell");
+
+    expect(server?.line).toBe(1);
+    expect(server?.fieldLines?.command).toBe(2);
+    expect(server?.fieldLines?.default_tools_approval_mode).toBe(4);
+  });
+
+  it("records source line hints for inline plugin MCP servers", async () => {
+    const manifestContent = `{
+  "name": "inline-plugin",
+  "version": "0.1.0",
+  "mcpServers": {
+    "inline_docs": {
+      "command": "node",
+      "enabled_tools": ["search"]
+    }
+  }
+}`;
+    const result = await discoverPluginMcpServers(
+      process.cwd(),
+      {
+        name: "inline-plugin",
+        version: "0.1.0",
+        mcpServers: {
+          inline_docs: {
+            command: "node",
+            enabled_tools: ["search"]
+          }
+        },
+        mcp_servers: {}
+      },
+      "plugin.json",
+      manifestContent
+    );
+
+    expect(result.mcpServers[0]?.line).toBe(5);
+    expect(result.mcpServers[0]?.fieldLines?.command).toBe(6);
   });
 
   it("skips skills disabled by Codex skills.config", async () => {

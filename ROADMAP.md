@@ -14,16 +14,20 @@
 
 ## v0.2
 
-- JSON schema export
-- richer MCP policy checks and deny-list rules
-- first-party fixtures for common OSS workflow templates
-- plugin bundle compatibility checks against real-world example layouts
-- improved SARIF locations for repository-relative paths
+- JSON Schema export
+- SARIF locations with repository-relative paths and best-effort line hints
+- reusable GitHub Action support for schema export
 
 ## v0.3
 
+- richer MCP policy checks and deny-list rules
+- first-party fixtures for common OSS workflow templates
+- plugin bundle compatibility checks against real-world example layouts
 - registry index publishing workflow
 - docs site generated from exported registry index
+
+## v0.4+
+
 - optional trusted execution mode with sandboxing research
 
 ## Non-goals

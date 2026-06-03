@@ -22,6 +22,7 @@ npm run dev -- list
 npm run dev -- doctor
 npm run dev -- audit
 npm run dev -- export --out registry-index.json
+npm run dev -- schema --out codex-skills-registry.schema.json
 ```
 
 ## Pull request expectations
@@ -30,7 +31,7 @@ npm run dev -- export --out registry-index.json
 - Add or update tests for schema, discovery, registry, CLI, or audit behavior.
 - Do not add real secrets, tokens, private URLs, or production credentials to examples.
 - Prefer safe mock execution. Real script execution should be proposed separately with a clear sandboxing model.
-- When adding example skills, include a realistic `SKILL.md` and keep scripts as harmless placeholders.
+- When adding example skills, include a realistic `SKILL.md` and keep scripts as harmless local templates.
 
 ## Adding a skill example
 
@@ -55,5 +56,5 @@ npm run validate
 - `npm run release:check`
 - update `CHANGELOG.md` when one exists
 - confirm the npm package scope is correct for the publishing account
-- create a semver tag such as `v0.1.0`
+- create a semver tag such as `v0.2.0`
 - push the tag to trigger the release workflow, or publish manually with `npm publish --access public`

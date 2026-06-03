@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+- Add JSON Schema catalog and named schema export through the CLI and SDK.
+- Add reusable GitHub Action support for `command: schema`.
+- Document schema export for editor validation and CI integration.
+- Add source file and best-effort line hints to audit, validation, SARIF, and
+  GitHub Actions annotation output.
+- Normalize SARIF artifact URIs and rule metadata to repository-relative paths
+  when a project root is available.
+- Export registry indexes with project-relative paths from the CLI.
+- Reject mock runs when the requested trigger is not supported by the target
+  skill.
+
 ## 0.1.1
 
 - Include discovery diagnostics in `validate` and `audit` command failures.

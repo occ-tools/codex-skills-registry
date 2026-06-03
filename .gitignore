@@ -3,6 +3,7 @@ dist/
 coverage/
 .npm-cache/
 registry-index.json
+codex-skills-registry.schema.json
 codex-skills-registry.sarif
 .env
 *.log

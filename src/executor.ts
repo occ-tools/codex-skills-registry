@@ -66,6 +66,12 @@ export async function executeMockSkill(
     throw new Error(`Skill '${skillName}' is not registered.`);
   }
 
+  if (options.trigger && !skill.triggers.includes(options.trigger)) {
+    throw new Error(
+      `Skill '${skillName}' does not accept trigger '${options.trigger}'. Supported triggers: ${skill.triggers.join(", ")}.`
+    );
+  }
+
   const event = createMockEvent(skill, options);
   const logs = [
     `[mock] ${skill.name} accepted a ${event.trigger} event from ${event.repository}.`,

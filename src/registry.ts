@@ -38,6 +38,10 @@ export interface RegistryIndex {
   policy: RegistryPolicy;
 }
 
+export interface RegistryIndexOptions {
+  relativePaths?: boolean;
+}
+
 export interface RegisterOptions {
   overwrite?: boolean;
 }
@@ -48,6 +52,7 @@ export interface RegisterOptions {
  * mock runs, but never executes arbitrary skill scripts.
  */
 export class SkillsRegistry {
+  private cwd = process.cwd();
   private readonly skills = new Map<string, CodexSkill>();
   private readonly mcpServers: DiscoveredMcpServer[] = [];
   private readonly plugins: DiscoveredPlugin[] = [];
@@ -67,6 +72,7 @@ export class SkillsRegistry {
     const policy = await loadRegistryPolicy(cwd, options.policyFile);
     const discovered = await discoverProject(options);
 
+    registry.cwd = cwd;
     registry.policy = policy.policy;
     registry.policyPath = policy.sourcePath;
     registry.addDiagnostics(policy.diagnostics);
@@ -222,6 +228,8 @@ export class SkillsRegistry {
         issues.push({
           severity: "error",
           path: `${skill.name}.entryPoint`,
+          file: skill.skillFile,
+          line: skillLine(skill, "entryPoint"),
           message: "Configured entryPoint must be relative and stay inside the skill directory."
         });
       } else {
@@ -231,6 +239,8 @@ export class SkillsRegistry {
           issues.push({
             severity: "error",
             path: entryPath,
+            file: skill.skillFile,
+            line: skillLine(skill, "entryPoint"),
             message: "Configured entryPoint does not exist."
           });
         }
@@ -328,8 +338,8 @@ export class SkillsRegistry {
    *
    * @returns Registry snapshot.
    */
-  toIndex(): RegistryIndex {
-    return {
+  toIndex(options: RegistryIndexOptions = {}): RegistryIndex {
+    const index: RegistryIndex = {
       generatedAt: new Date().toISOString(),
       skills: this.listSkills(),
       mcpServers: this.listMcpServers(),
@@ -337,6 +347,8 @@ export class SkillsRegistry {
       diagnostics: [...this.listDiagnostics(), ...this.audit()],
       policy: this.policy
     };
+
+    return options.relativePaths ? relativizeRegistryIndex(index, this.cwd) : index;
   }
 
   /**
@@ -490,13 +502,20 @@ export class SkillsRegistry {
  * @param issues - Issues to format.
  * @returns Human-readable lines.
  */
-export function formatValidationIssues(issues: ValidationIssue[]): string {
+export function formatValidationIssues(
+  issues: ValidationIssue[],
+  options: { cwd?: string } = {}
+): string {
   if (issues.length === 0) {
     return "No validation issues found.";
   }
 
   return issues
-    .map((issue) => `[${issue.severity.toUpperCase()}] ${issue.path}: ${issue.message}`)
+    .map((issue) => {
+      const displayPath = issueDisplayPath(issue, options.cwd);
+      const location = issueLocation(issue, options.cwd);
+      return `[${issue.severity.toUpperCase()}] ${displayPath}${location ? ` (${location})` : ""}: ${issue.message}`;
+    })
     .join("\n");
 }
 
@@ -551,7 +570,77 @@ function dedupeMcpServers(servers: DiscoveredMcpServer[]): DiscoveredMcpServer[]
   return deduped;
 }
 
+function relativizeRegistryIndex(index: RegistryIndex, cwd: string): RegistryIndex {
+  const root = path.resolve(cwd);
+
+  return {
+    ...index,
+    skills: index.skills.map((skill) => ({
+      ...skill,
+      rootDir: relativizePathValue(skill.rootDir, root),
+      skillFile: relativizePathValue(skill.skillFile, root)
+    })),
+    mcpServers: index.mcpServers.map((server) => ({
+      ...server,
+      sourcePath: relativizePathValue(server.sourcePath, root) ?? server.sourcePath
+    })),
+    plugins: index.plugins.map((plugin) => ({
+      ...plugin,
+      sourcePath: relativizePathValue(plugin.sourcePath, root) ?? plugin.sourcePath,
+      rootDir: relativizePathValue(plugin.rootDir, root) ?? plugin.rootDir
+    })),
+    diagnostics: index.diagnostics.map((issue) => ({
+      ...issue,
+      path: issue.file ? issue.path.replace(issue.file, relativizePathValue(issue.file, root) ?? issue.file) : issue.path,
+      file: relativizePathValue(issue.file, root)
+    }))
+  };
+}
+
+function relativizePathValue(value: string | undefined, root: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const relative = path.isAbsolute(value) ? relativePathInside(root, value) : undefined;
+  return (relative ?? value).replace(/\\/g, "/");
+}
+
 function isSubpath(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function issueLocation(issue: ValidationIssue, cwd?: string): string | undefined {
+  if (!issue.file) {
+    return undefined;
+  }
+
+  const file = cwd && path.isAbsolute(issue.file) ? relativePathInside(path.resolve(cwd), issue.file) : undefined;
+  const displayFile = (file ?? issue.file).replace(/\\/g, "/");
+  return issue.line ? `${displayFile}:${issue.line}` : displayFile;
+}
+
+function issueDisplayPath(issue: ValidationIssue, cwd?: string): string {
+  if (!issue.file || !cwd || !path.isAbsolute(issue.file)) {
+    return issue.path.replace(/\\/g, "/");
+  }
+
+  const file = relativePathInside(path.resolve(cwd), issue.file);
+  return file ? issue.path.replace(issue.file, file.replace(/\\/g, "/")) : issue.path.replace(/\\/g, "/");
+}
+
+function relativePathInside(root: string, candidate: string): string | undefined {
+  const relative = path.relative(root, path.resolve(candidate));
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : undefined;
+}
+
+function skillLine(skill: CodexSkill, field: string): number | undefined {
+  const sourceLines = skill.metadata.sourceLines;
+  if (!sourceLines || typeof sourceLines !== "object" || Array.isArray(sourceLines)) {
+    return undefined;
+  }
+
+  const line = (sourceLines as Record<string, unknown>)[field];
+  return typeof line === "number" ? line : undefined;
 }

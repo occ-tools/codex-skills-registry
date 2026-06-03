@@ -7,11 +7,11 @@ inputs:
     required: false
     default: .
   command:
-    description: CLI command to run. Supported values are doctor, validate, list, audit, and export.
+    description: CLI command to run. Supported values are doctor, validate, list, audit, export, and schema.
     required: false
     default: doctor
   include-examples:
-    description: Include bundled example skills from this action repository.
+    description: Include examples/ skill roots under the target project directory.
     required: false
     default: "false"
   config:
@@ -30,6 +30,10 @@ inputs:
     description: Enable strict audit behavior for doctor or audit.
     required: false
     default: "false"
+  schema:
+    description: Optional schema name when command is schema. Omit to export the full catalog.
+    required: false
+    default: ""
 
 outputs:
   index-path:
@@ -38,6 +42,9 @@ outputs:
   sarif-path:
     description: Path to the SARIF file when format is sarif.
     value: ${{ steps.run.outputs.sarif-path }}
+  schema-path:
+    description: Path to the exported JSON Schema catalog when command is schema.
+    value: ${{ steps.run.outputs.schema-path }}
 
 runs:
   using: composite
@@ -47,7 +54,7 @@ runs:
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
-        npm ci
+        npm ci --ignore-scripts
         npm run build
 
     - name: Run codex-skills
@@ -61,6 +68,7 @@ runs:
         REGISTRY_INPUT_POLICY: ${{ inputs.policy }}
         REGISTRY_INPUT_FORMAT: ${{ inputs.format }}
         REGISTRY_INPUT_STRICT: ${{ inputs.strict }}
+        REGISTRY_INPUT_SCHEMA: ${{ inputs.schema }}
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
@@ -119,6 +127,15 @@ runs:
             out_file="$target_path/codex-skills-registry-index.json"
             node dist/cli.js "${args[@]}" export --out codex-skills-registry-index.json
             echo "index-path=$out_file" >> "$GITHUB_OUTPUT"
+            ;;
+          schema)
+            out_file="$target_path/codex-skills-registry.schema.json"
+            schema_args=()
+            if [[ -n "$REGISTRY_INPUT_SCHEMA" ]]; then
+              schema_args+=("$REGISTRY_INPUT_SCHEMA")
+            fi
+            node dist/cli.js "${args[@]}" schema "${schema_args[@]}" --out codex-skills-registry.schema.json
+            echo "schema-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           *)
             echo "Unsupported command: $REGISTRY_INPUT_COMMAND" >&2

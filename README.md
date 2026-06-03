@@ -26,12 +26,16 @@ release notes, dependency review, and security-oriented automation.
   and manual maintainer workflows.
 - JSON, SARIF, and GitHub Actions annotation output for automation and code
   scanning integrations.
+- Repository-relative SARIF locations with best-effort line hints for skills
+  and MCP server definitions.
+- JSON Schema catalog export for editor validation and downstream CI checks.
+- Portable registry index export with project-relative paths.
 - Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
   source repositories.
 
 ## Status
 
-This is an early v0.1 project. It validates, indexes, audits, and mock-runs
+Version 0.2 validates, indexes, audits, exports schemas for, and mock-runs
 workflow definitions. It does not execute arbitrary skill scripts.
 
 ## Why this exists
@@ -81,6 +85,7 @@ node dist/cli.js list
 node dist/cli.js validate issue-triage
 node dist/cli.js run issue-triage --trigger issue
 node dist/cli.js doctor
+node dist/cli.js schema --out codex-skills-registry.schema.json
 ```
 
 During development:
@@ -88,6 +93,7 @@ During development:
 ```bash
 npm run dev -- list
 npm run dev -- export --out registry-index.json
+npm run dev -- schema --out codex-skills-registry.schema.json
 ```
 
 ## CLI
@@ -99,6 +105,8 @@ codex-skills run <name> --trigger issue
 codex-skills doctor
 codex-skills audit
 codex-skills export --out registry-index.json
+codex-skills schema --out codex-skills-registry.schema.json
+codex-skills schema policy --out codex-skills-policy.schema.json
 ```
 
 For machine-readable CI output:
@@ -110,14 +118,6 @@ codex-skills doctor --format sarif
 codex-skills doctor --github-annotations
 ```
 
-Legacy prototype flags are also supported:
-
-```bash
-codex-skills --list
-codex-skills --validate --name issue-triage
-codex-skills --run issue-triage
-```
-
 ## Project layout
 
 ```text
@@ -127,6 +127,7 @@ src/registry.ts    In-memory registry, validation, and JSON export
 src/policy.ts      Project policy loading for .codex-skills-registry.yaml
 src/audit.ts       Safety checks for review-worthy MCP and skill risks
 src/sarif.ts       SARIF conversion for Code Scanning integrations
+src/json-schema.ts JSON Schema export for editor and CI integrations
 src/executor.ts    Safe mock executor
 src/cli.ts         Commander-based CLI
 examples/          Example maintainer workflows and MCP config
@@ -216,6 +217,68 @@ failOnWarnings: false
 Policy is intentionally small for v0.1. It should catch review-worthy risks
 without pretending to prove that a third-party MCP server is safe.
 
+## JSON Schema export
+
+The `schema` command exports a Draft 2020-12 catalog containing the registry
+schemas supported by this project:
+
+```bash
+codex-skills schema --out codex-skills-registry.schema.json
+```
+
+To export one schema document, pass its name as an argument:
+
+```bash
+codex-skills schema skill-frontmatter --out skill-frontmatter.schema.json
+codex-skills schema policy --out codex-skills-policy.schema.json
+codex-skills schema plugin-manifest --out codex-plugin-manifest.schema.json
+```
+
+Supported names are `skill-frontmatter`, `skill`, `policy`, `mcp-config`,
+`mcp-server`, and `plugin-manifest`. The generated schemas describe the shapes
+validated by `codex-skills-registry`; they are not a claim that every future
+Codex or MCP field is known by this project.
+
+## Add to a repository in 3 minutes
+
+1. Add a project policy file:
+
+```yaml
+requirePinnedMcpPackages: true
+requireExplicitMcpToolPolicy: true
+requirePluginSkillPaths: true
+failOnWarnings: false
+```
+
+2. Run the local check:
+
+```bash
+npx @wangjiehu/codex-skills-registry@latest doctor --policy .codex-skills-registry.yaml
+```
+
+3. Add the GitHub Action:
+
+```yaml
+name: codex-skills
+
+on:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: wangjiehu/codex-skills-registry@v0.2.0
+        with:
+          path: .
+          command: doctor
+          policy: .codex-skills-registry.yaml
+```
+
+4. Review diagnostics before trusting new skills, plugin manifests, or MCP
+   server definitions.
+
 ## GitHub Action
 
 Use the bundled composite action to validate a repository in CI:
@@ -231,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.1.1
+      - uses: wangjiehu/codex-skills-registry@v0.2.0
         with:
           path: .
           command: doctor
@@ -240,15 +303,26 @@ jobs:
           strict: "false"
 ```
 
-Supported action commands are `doctor`, `validate`, `list`, `audit`, and
-`export`. The action emits GitHub annotations for diagnostics, validation
+Supported action commands are `doctor`, `validate`, `list`, `audit`, `export`,
+and `schema`. The action emits GitHub annotations for diagnostics, validation
 issues, and audit findings.
+
+To export a schema catalog or a single named schema from CI:
+
+```yaml
+- id: schema
+  uses: wangjiehu/codex-skills-registry@v0.2.0
+  with:
+    path: .
+    command: schema
+    schema: policy
+```
 
 To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.1.1
+  uses: wangjiehu/codex-skills-registry@v0.2.0
   continue-on-error: true
   with:
     path: .
@@ -293,8 +367,8 @@ smoke test of the reusable action.
 ## Release
 
 The package is configured as the public scoped package
-`@wangjiehu/codex-skills-registry`. Before the first npm release, confirm the
-publishing account owns the `@wangjiehu` npm scope.
+`@wangjiehu/codex-skills-registry`. Before publishing from a new account,
+confirm the account owns the `@wangjiehu` npm scope.
 
 Local release check:
 
@@ -312,7 +386,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.1.0` is pushed.
+Automated releases run when a semver tag such as `v0.2.0` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

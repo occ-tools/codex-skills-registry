@@ -27,6 +27,7 @@ jobs:
       - run: node dist/cli.js list
       - run: node dist/cli.js doctor
       - run: node dist/cli.js --format sarif doctor
+      - run: node dist/cli.js schema policy
       - run: npm run pack:check
 
   action-smoke:
@@ -45,3 +46,9 @@ jobs:
           path: .
           include-examples: "true"
           command: doctor
+      - name: Smoke schema export action
+        uses: ./
+        with:
+          path: .
+          command: schema
+          schema: policy

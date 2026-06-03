@@ -200,6 +200,8 @@ export interface ValidationIssue {
   severity: ValidationSeverity;
   path: string;
   message: string;
+  file?: string;
+  line?: number;
 }
 
 export interface ValidationResult {
@@ -225,7 +227,7 @@ export function zodErrorToIssues(error: ZodError, basePath = "$"): ValidationIss
 /**
  * Normalizes user-facing skill declarations into the canonical registry
  * schema. This accepts both official SKILL.md field names and the older
- * skillName/triggerType shape that appears in many prototype prompts.
+ * skillName/triggerType shape that appears in older registry records.
  *
  * @param input - Unknown skill-like record.
  * @param defaults - Registry-controlled fields such as source and filesystem paths.

@@ -25,6 +25,8 @@ export interface DiscoveredMcpServer {
   name: string;
   config: McpServerConfig;
   sourcePath: string;
+  line?: number;
+  fieldLines?: Record<string, number>;
 }
 
 export interface DiscoveredPlugin {
@@ -209,10 +211,12 @@ export async function loadSkillFromDirectory(
 ): Promise<DiscoveryResult> {
   const result = cloneEmptyResult();
   const skillFile = path.join(skillDir, "SKILL.md");
+  let sourceLines: Record<string, number> = {};
 
   try {
     const markdown = await readFile(skillFile, "utf8");
     const parsed = parseSkillMarkdown(markdown);
+    sourceLines = collectYamlFrontmatterLines(markdown);
     const agentMetadata = await loadAgentMetadata(skillDir);
     const defaultTriggers = inferTriggers(
       `${String(parsed.frontmatter.name ?? "")} ${String(parsed.frontmatter.description ?? "")}`
@@ -227,7 +231,8 @@ export async function loadSkillFromDirectory(
       entryPoint,
       metadata: {
         body: parsed.body,
-        agent: agentMetadata
+        agent: agentMetadata,
+        sourceLines
       }
     });
 
@@ -243,7 +248,11 @@ export async function loadSkillFromDirectory(
   } catch (error) {
     if (error instanceof ZodError) {
       result.diagnostics.push(
-        ...zodErrorToIssues(error, skillFile).map((issue) => ({ ...issue, file: skillFile }))
+        ...zodErrorToIssues(error, skillFile).map((issue) => ({
+          ...issue,
+          file: skillFile,
+          line: lineForIssuePath(issue.path, sourceLines)
+        }))
       );
       return result;
     }
@@ -296,7 +305,13 @@ export async function discoverMcpServersFromConfig(filePath: string): Promise<Di
         continue;
       }
 
-      result.mcpServers.push({ name, config: serverValidation.data, sourcePath: filePath });
+      result.mcpServers.push({
+        name,
+        config: serverValidation.data,
+        sourcePath: filePath,
+        line: findTomlMcpServerLine(content, name),
+        fieldLines: findTomlMcpServerFieldLines(content, name)
+      });
     }
   } catch (error) {
     result.diagnostics.push({
@@ -374,7 +389,8 @@ export async function discoverPluginsFromRoot(root: string): Promise<DiscoveryRe
     }
 
     try {
-      const parsed = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+      const manifestContent = await readFile(manifestPath, "utf8");
+      const parsed = JSON.parse(manifestContent) as unknown;
       const validation = PluginManifestSchema.safeParse(parsed);
       if (!validation.success) {
         result.diagnostics.push(
@@ -384,7 +400,10 @@ export async function discoverPluginsFromRoot(root: string): Promise<DiscoveryRe
       }
 
       result.plugins.push({ manifest: validation.data, sourcePath: manifestPath, rootDir: pluginDir });
-      mergeResult(result, await discoverPluginMcpServers(pluginDir, validation.data, manifestPath));
+      mergeResult(
+        result,
+        await discoverPluginMcpServers(pluginDir, validation.data, manifestPath, manifestContent)
+      );
     } catch (error) {
       result.diagnostics.push({
         severity: "error",
@@ -409,7 +428,8 @@ export async function discoverPluginsFromRoot(root: string): Promise<DiscoveryRe
 export async function discoverPluginMcpServers(
   pluginDir: string,
   manifest: PluginManifest,
-  manifestPath: string
+  manifestPath: string,
+  manifestContent?: string
 ): Promise<DiscoveryResult> {
   const result = cloneEmptyResult();
   const directServers =
@@ -429,7 +449,13 @@ export async function discoverPluginMcpServers(
       continue;
     }
 
-    result.mcpServers.push({ name, config: validation.data, sourcePath: manifestPath });
+    result.mcpServers.push({
+      name,
+      config: validation.data,
+      sourcePath: manifestPath,
+      line: manifestContent ? findJsonPropertyLine(manifestContent, name) : undefined,
+      fieldLines: manifestContent ? findJsonNestedFieldLines(manifestContent, name) : undefined
+    });
   }
 
   if (typeof manifest.mcpServers !== "string") {
@@ -458,7 +484,8 @@ export async function discoverPluginMcpServers(
   }
 
   try {
-    const parsed = JSON.parse(await readFile(mcpPath, "utf8")) as unknown;
+    const mcpContent = await readFile(mcpPath, "utf8");
+    const parsed = JSON.parse(mcpContent) as unknown;
     const parsedRecord =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
@@ -478,7 +505,13 @@ export async function discoverPluginMcpServers(
         continue;
       }
 
-      result.mcpServers.push({ name, config: validation.data, sourcePath: mcpPath });
+      result.mcpServers.push({
+        name,
+        config: validation.data,
+        sourcePath: mcpPath,
+        line: findJsonPropertyLine(mcpContent, name),
+        fieldLines: findJsonNestedFieldLines(mcpContent, name)
+      });
     }
   } catch (error) {
     result.diagnostics.push({
@@ -654,4 +687,118 @@ function extractSkillConfigEntries(input: unknown): Array<{ name?: unknown; enab
   }
 
   return [];
+}
+
+function collectYamlFrontmatterLines(markdown: string): Record<string, number> {
+  const lines = markdown.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const sourceLines: Record<string, number> = {};
+
+  if (lines[0]?.trim() !== "---") {
+    return sourceLines;
+  }
+
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line?.trim() === "---") {
+      break;
+    }
+
+    const match = line?.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s*:/);
+    if (match?.[1]) {
+      sourceLines[match[1]] = index + 1;
+    }
+  }
+
+  return sourceLines;
+}
+
+function lineForIssuePath(pathValue: string, sourceLines: Record<string, number>): number | undefined {
+  const field = Object.keys(sourceLines).find((key) => pathValue.endsWith(`.${key}`));
+  return field ? sourceLines[field] : undefined;
+}
+
+function findTomlMcpServerLine(content: string, name: string): number | undefined {
+  return findTomlMcpServerHeader(content, name)?.line;
+}
+
+function findTomlMcpServerFieldLines(content: string, name: string): Record<string, number> {
+  const header = findTomlMcpServerHeader(content, name);
+  if (!header) {
+    return {};
+  }
+
+  const lines = content.split(/\r?\n/);
+  const fieldLines: Record<string, number> = {};
+
+  for (let index = header.index + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (/^\s*\[/.test(line)) {
+      break;
+    }
+
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=/);
+    if (match?.[1]) {
+      fieldLines[match[1]] = index + 1;
+    }
+  }
+
+  return fieldLines;
+}
+
+function findTomlMcpServerHeader(
+  content: string,
+  name: string
+): { index: number; line: number } | undefined {
+  const escapedName = escapeRegExp(name);
+  const headerPattern = new RegExp(
+    `^\\s*\\[\\s*mcp_servers\\.(?:"${escapedName}"|'${escapedName}'|${escapedName})\\s*\\]\\s*$`
+  );
+
+  const lines = content.split(/\r?\n/);
+  const index = lines.findIndex((line) => headerPattern.test(line));
+  return index >= 0 ? { index, line: index + 1 } : undefined;
+}
+
+function findJsonPropertyLine(content: string, key: string): number | undefined {
+  const propertyPattern = new RegExp(`"${escapeRegExp(key)}"\\s*:`);
+  const index = content.split(/\r?\n/).findIndex((line) => propertyPattern.test(line));
+  return index >= 0 ? index + 1 : undefined;
+}
+
+function findJsonNestedFieldLines(content: string, objectKey: string): Record<string, number> {
+  const lines = content.split(/\r?\n/);
+  const startIndex = lines.findIndex((line) =>
+    new RegExp(`"${escapeRegExp(objectKey)}"\\s*:`).test(line)
+  );
+  const fieldLines: Record<string, number> = {};
+
+  if (startIndex < 0) {
+    return fieldLines;
+  }
+
+  let depth = 0;
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (depth > 0) {
+      const match = line.match(/^\s*"([^"]+)"\s*:/);
+      if (match?.[1] && match[1] !== objectKey) {
+        fieldLines[match[1]] = index + 1;
+      }
+    }
+
+    depth += countChar(line, "{") - countChar(line, "}");
+    if (index > startIndex && depth <= 0) {
+      break;
+    }
+  }
+
+  return fieldLines;
+}
+
+function countChar(value: string, target: string): number {
+  return [...value].filter((char) => char === target).length;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

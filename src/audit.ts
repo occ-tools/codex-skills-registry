@@ -57,6 +57,8 @@ export function auditSkill(skill: CodexSkill, options: AuditOptions = {}): Valid
       issues.push({
         severity: "error",
         path: `${skill.name}.entryPoint`,
+        file: skill.skillFile,
+        line: skillLine(skill, "entryPoint"),
         message: "Skill entryPoint must be relative to the skill directory."
       });
     }
@@ -66,6 +68,8 @@ export function auditSkill(skill: CodexSkill, options: AuditOptions = {}): Valid
       issues.push({
         severity: "error",
         path: `${skill.name}.entryPoint`,
+        file: skill.skillFile,
+        line: skillLine(skill, "entryPoint"),
         message: "Skill entryPoint must not escape the skill directory."
       });
     }
@@ -73,6 +77,8 @@ export function auditSkill(skill: CodexSkill, options: AuditOptions = {}): Valid
     issues.push({
       severity: "warning",
       path: `${skill.name}.entryPoint`,
+      file: skill.skillFile,
+      line: skillLine(skill, "entryPoint"),
       message: "Instruction-only skill has no entryPoint; document this intentionally."
     });
   }
@@ -81,6 +87,8 @@ export function auditSkill(skill: CodexSkill, options: AuditOptions = {}): Valid
     issues.push({
       severity: "warning",
       path: `${skill.name}.tags`,
+      file: skill.skillFile,
+      line: skillLine(skill, "tags"),
       message: "Security-triggered skills should carry a security tag for review routing."
     });
   }
@@ -112,6 +120,8 @@ export function auditMcpServer(
       issues.push({
         severity: "error",
         path: `${basePath}.command`,
+        file: server.sourcePath,
+        line: server.fieldLines?.command ?? server.line,
         message: `MCP command '${commandName}' is not allowed by project policy.`
       });
     }
@@ -120,6 +130,8 @@ export function auditMcpServer(
       issues.push({
         severity: options.strict ? "error" : "warning",
         path: `${basePath}.command`,
+        file: server.sourcePath,
+        line: server.fieldLines?.command ?? server.line,
         message:
           "Shell-based MCP commands require careful review because arguments may execute arbitrary code."
       });
@@ -133,6 +145,8 @@ export function auditMcpServer(
       issues.push({
         severity: policy?.requirePinnedMcpPackages ? "error" : "warning",
         path: `${basePath}.args`,
+        file: server.sourcePath,
+        line: server.fieldLines?.args ?? server.line,
         message: "npx MCP servers should pin package versions for reproducible CI."
       });
     }
@@ -144,6 +158,8 @@ export function auditMcpServer(
       issues.push({
         severity: "error",
         path: `${basePath}.url`,
+        file: server.sourcePath,
+        line: server.fieldLines?.url ?? server.line,
         message: `Remote MCP host '${url.host}' is not allowed by project policy.`
       });
     }
@@ -152,6 +168,8 @@ export function auditMcpServer(
       issues.push({
         severity: options.strict ? "error" : "warning",
         path: `${basePath}.url`,
+        file: server.sourcePath,
+        line: server.fieldLines?.url ?? server.line,
         message: "Remote MCP servers should use HTTPS."
       });
     }
@@ -160,6 +178,8 @@ export function auditMcpServer(
       issues.push({
         severity: "warning",
         path: `${basePath}.bearer_token_env_var`,
+        file: server.sourcePath,
+        line: server.fieldLines?.bearer_token_env_var ?? server.line,
         message: "Remote MCP servers without bearer_token_env_var should be explicitly documented."
       });
     }
@@ -169,6 +189,8 @@ export function auditMcpServer(
     issues.push({
       severity: policy?.requireExplicitMcpToolPolicy ? "error" : "warning",
       path: `${basePath}.enabled_tools`,
+      file: server.sourcePath,
+      line: server.fieldLines?.enabled_tools ?? server.fieldLines?.disabled_tools ?? server.line,
       message: "MCP server does not declare enabled_tools or disabled_tools; review tool exposure."
     });
   }
@@ -177,6 +199,8 @@ export function auditMcpServer(
     issues.push({
       severity: options.strict ? "error" : "warning",
       path: `${basePath}.default_tools_approval_mode`,
+      file: server.sourcePath,
+      line: server.fieldLines?.default_tools_approval_mode ?? server.line,
       message: "Broad default tool approval policies should be reviewed by a maintainer."
     });
   }
@@ -187,6 +211,8 @@ export function auditMcpServer(
         issues.push({
           severity: "warning",
           path: `${basePath}.env.${key}`,
+          file: server.sourcePath,
+          line: server.fieldLines?.env ?? server.line,
           message: "Potential secret literal found in MCP env; prefer env_vars or bearer_token_env_var."
         });
       }
@@ -194,4 +220,14 @@ export function auditMcpServer(
   }
 
   return issues;
+}
+
+function skillLine(skill: CodexSkill, field: string): number | undefined {
+  const sourceLines = skill.metadata.sourceLines;
+  if (!sourceLines || typeof sourceLines !== "object" || Array.isArray(sourceLines)) {
+    return undefined;
+  }
+
+  const line = (sourceLines as Record<string, unknown>)[field];
+  return typeof line === "number" ? line : undefined;
 }

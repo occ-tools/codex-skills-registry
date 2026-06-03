@@ -3,8 +3,14 @@ import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { executeMockSkill } from "./executor.js";
+import {
+  createRegistryJsonSchema,
+  createRegistryJsonSchemaCatalog,
+  isRegistryJsonSchemaName,
+  listRegistryJsonSchemaNames
+} from "./json-schema.js";
 import type { RegistryPolicy } from "./policy.js";
 import { SkillsRegistry, formatValidationIssues, type RegistryLoadOptions } from "./registry.js";
 import { createSarifLog } from "./sarif.js";
@@ -44,13 +50,13 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("-C, --cwd <dir>", "project directory to inspect", process.cwd())
     .option("--config <file>", "JSON/YAML file containing additional skill records")
     .option("--policy <file>", "YAML/JSON registry policy file")
-    .option("--no-examples", "exclude bundled example skills")
+    .option("--no-examples", "exclude the examples/ skill roots under the project directory")
     .option("--format <format>", "output format: text, json, or sarif", "text")
     .option("--github-annotations", "emit GitHub Actions annotations for diagnostics")
-    .option("--list", "legacy flag: list registered skills")
-    .option("--validate", "legacy flag: validate a skill named by --name")
-    .option("--name <skillName>", "skill name for --validate")
-    .option("--run <skillName>", "legacy flag: mock-run a skill")
+    .addOption(new Option("--list", "legacy flag: list registered skills").hideHelp())
+    .addOption(new Option("--validate", "legacy flag: validate a skill named by --name").hideHelp())
+    .addOption(new Option("--name <skillName>", "skill name for --validate").hideHelp())
+    .addOption(new Option("--run <skillName>", "legacy flag: mock-run a skill").hideHelp())
     .action(async (options: Record<string, unknown>) => {
       const loadOptions = toLoadOptions(options);
       const outputOptions = toOutputOptions(options);
@@ -147,6 +153,32 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleExport(toLoadOptions(command.parent?.opts() ?? {}), options.out);
     });
 
+  program
+    .command("schema")
+    .description("export JSON Schema for supported registry files")
+    .argument("[schema]", `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`)
+    .option("-o, --out <file>", "output file; prints to stdout when omitted")
+    .option(
+      "--schema <schema>",
+      `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`
+    )
+    .action(
+      async (
+        schema: string | undefined,
+        options: { out?: string; schema?: string },
+        command: Command
+      ) => {
+        if (schema && options.schema && schema !== options.schema) {
+          throw new Error("Use either the schema argument or --schema; both values must not differ.");
+        }
+
+        await handleSchema(toLoadOptions(command.parent?.opts() ?? {}), {
+          out: options.out,
+          schema: schema ?? options.schema
+        });
+      }
+    );
+
   await program.parseAsync(argv);
 }
 
@@ -188,17 +220,17 @@ async function handleValidate(
       diagnostics.some((issue) => issue.severity === "error");
 
     if (outputOptions.githubAnnotations) {
-      emitGithubAnnotations(allIssues);
+      emitGithubAnnotations(allIssues, options.cwd);
     }
 
     if (outputOptions.format === "sarif") {
-      writeJson(createSarifLog(allIssues));
+      writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
     } else if (outputOptions.format === "json") {
       writeJson({ diagnostics, results: resultList });
     } else {
       if (diagnostics.length > 0) {
         console.log("Diagnostics:");
-        console.log(formatValidationIssues(diagnostics));
+        console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
       }
 
       if (resultList.length === 0 && diagnostics.length === 0) {
@@ -208,7 +240,7 @@ async function handleValidate(
       for (const result of resultList) {
         console.log(`${result.name}: ${result.valid ? "valid" : "invalid"}`);
         if (result.issues.length > 0) {
-          console.log(formatValidationIssues(result.issues));
+          console.log(formatValidationIssues(result.issues, { cwd: options.cwd }));
         }
       }
     }
@@ -224,21 +256,21 @@ async function handleValidate(
   const allIssues = [...diagnostics, ...result.issues];
 
   if (outputOptions.githubAnnotations) {
-    emitGithubAnnotations(allIssues);
+    emitGithubAnnotations(allIssues, options.cwd);
   }
 
   if (outputOptions.format === "sarif") {
-    writeJson(createSarifLog(allIssues));
+    writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
     writeJson({ name, ...result, diagnostics });
   } else {
     if (diagnostics.length > 0) {
       console.log("Diagnostics:");
-      console.log(formatValidationIssues(diagnostics));
+      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
     }
 
     console.log(`${name}: ${result.valid ? "valid" : "invalid"}`);
-    console.log(formatValidationIssues(result.issues));
+    console.log(formatValidationIssues(result.issues, { cwd: options.cwd }));
   }
 
   if (!result.valid || diagnostics.some((issue) => issue.severity === "error")) {
@@ -297,11 +329,11 @@ async function handleDoctor(
   };
 
   if (outputOptions.githubAnnotations) {
-    emitGithubAnnotations(allIssues);
+    emitGithubAnnotations(allIssues, options.cwd);
   }
 
   if (outputOptions.format === "sarif") {
-    writeJson(createSarifLog(allIssues));
+    writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
     writeJson(report);
   } else {
@@ -314,17 +346,17 @@ async function handleDoctor(
 
     if (diagnostics.length > 0) {
       console.log("\nDiagnostics:");
-      console.log(formatValidationIssues(diagnostics));
+      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
     }
 
     if (validationIssues.length > 0) {
       console.log("\nValidation:");
-      console.log(formatValidationIssues(validationIssues));
+      console.log(formatValidationIssues(validationIssues, { cwd: options.cwd }));
     }
 
     if (auditIssues.length > 0) {
       console.log("\nAudit:");
-      console.log(formatValidationIssues(auditIssues));
+      console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
     }
   }
 
@@ -344,11 +376,11 @@ async function handleAudit(
   const issues = [...diagnostics, ...auditIssues];
 
   if (outputOptions.githubAnnotations) {
-    emitGithubAnnotations(issues);
+    emitGithubAnnotations(issues, options.cwd);
   }
 
   if (outputOptions.format === "sarif") {
-    writeJson(createSarifLog(issues));
+    writeJson(createSarifLog(issues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
     writeJson({
       diagnostics,
@@ -359,16 +391,16 @@ async function handleAudit(
   } else {
     if (diagnostics.length > 0) {
       console.log("Diagnostics:");
-      console.log(formatValidationIssues(diagnostics));
+      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
     }
 
     if (auditIssues.length > 0) {
       if (diagnostics.length > 0) {
         console.log("\nAudit:");
       }
-      console.log(formatValidationIssues(auditIssues));
+      console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
     } else if (diagnostics.length === 0) {
-      console.log(formatValidationIssues(auditIssues));
+      console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
     }
   }
 
@@ -379,7 +411,7 @@ async function handleAudit(
 
 async function handleExport(options: CliLoadOptions, outFile?: string): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const json = `${JSON.stringify(registry.toIndex(), null, 2)}\n`;
+  const json = `${JSON.stringify(registry.toIndex({ relativePaths: true }), null, 2)}\n`;
 
   if (!outFile) {
     console.log(json);
@@ -389,6 +421,35 @@ async function handleExport(options: CliLoadOptions, outFile?: string): Promise<
   const outputPath = path.resolve(options.cwd ?? process.cwd(), outFile);
   await writeFile(outputPath, json, "utf8");
   console.log(`Exported registry index to ${outputPath}`);
+}
+
+async function handleSchema(
+  options: CliLoadOptions,
+  schemaOptions: { out?: string; schema?: string }
+): Promise<void> {
+  const schema = schemaOptions.schema
+    ? createNamedJsonSchema(schemaOptions.schema)
+    : createRegistryJsonSchemaCatalog();
+  const json = `${JSON.stringify(schema, null, 2)}\n`;
+
+  if (!schemaOptions.out) {
+    console.log(json);
+    return;
+  }
+
+  const outputPath = path.resolve(options.cwd ?? process.cwd(), schemaOptions.out);
+  await writeFile(outputPath, json, "utf8");
+  console.log(`Exported JSON Schema to ${outputPath}`);
+}
+
+function createNamedJsonSchema(name: string): Record<string, unknown> {
+  if (!isRegistryJsonSchemaName(name)) {
+    throw new Error(
+      `Unknown schema '${name}'. Supported schemas are: ${listRegistryJsonSchemaNames().join(", ")}.`
+    );
+  }
+
+  return createRegistryJsonSchema(name);
 }
 
 function toLoadOptions(options: Record<string, unknown>): CliLoadOptions {
@@ -426,13 +487,15 @@ function shouldFail(issues: ValidationIssue[], policy: RegistryPolicy): boolean 
   return issues.some((issue) => issue.severity === "error") || (policy.failOnWarnings && issues.length > 0);
 }
 
-function emitGithubAnnotations(issues: ValidationIssue[]): void {
+function emitGithubAnnotations(issues: ValidationIssue[], cwd?: string): void {
   for (const issue of issues) {
     const command = issue.severity === "error" ? "error" : "warning";
-    const file = issueFile(issue);
+    const file = issueFile(issue, cwd);
+    const line = issueLine(issue);
     const properties = [
       file ? `file=${escapeAnnotationProperty(file)}` : undefined,
-      `title=${escapeAnnotationProperty(issue.path)}`
+      line ? `line=${line}` : undefined,
+      `title=${escapeAnnotationProperty(issueTitle(issue, cwd))}`
     ].filter(Boolean);
     console.error(
       `::${command} ${properties.join(",")}::${escapeAnnotationMessage(issue.message)}`
@@ -440,9 +503,39 @@ function emitGithubAnnotations(issues: ValidationIssue[]): void {
   }
 }
 
-function issueFile(issue: ValidationIssue): string | undefined {
-  const candidate = (issue as ValidationIssue & { file?: unknown }).file;
-  return typeof candidate === "string" ? candidate : undefined;
+function issueFile(issue: ValidationIssue, cwd?: string): string | undefined {
+  const candidate = issue.file;
+  if (typeof candidate !== "string") {
+    return undefined;
+  }
+
+  if (cwd && path.isAbsolute(candidate)) {
+    const relative = path.relative(path.resolve(cwd), path.resolve(candidate));
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+      return relative.replace(/\\/g, "/");
+    }
+  }
+
+  return candidate.replace(/\\/g, "/");
+}
+
+function issueLine(issue: ValidationIssue): number | undefined {
+  return typeof issue.line === "number" && Number.isInteger(issue.line) && issue.line > 0
+    ? issue.line
+    : undefined;
+}
+
+function issueTitle(issue: ValidationIssue, cwd?: string): string {
+  if (!issue.file || !cwd || !path.isAbsolute(issue.file)) {
+    return issue.path.replace(/\\/g, "/");
+  }
+
+  const relative = path.relative(path.resolve(cwd), path.resolve(issue.file));
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+    return issue.path.replace(issue.file, relative.replace(/\\/g, "/"));
+  }
+
+  return issue.path.replace(/\\/g, "/");
 }
 
 function escapeAnnotationProperty(value: string): string {

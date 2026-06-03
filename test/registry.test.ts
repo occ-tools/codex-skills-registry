@@ -19,6 +19,19 @@ describe("SkillsRegistry", () => {
     expect(result.logs.join("\n")).toContain("accepted a issue event");
   });
 
+  it("rejects mock runs with unsupported triggers", async () => {
+    const registry = await SkillsRegistry.load({
+      cwd: process.cwd(),
+      includeExamples: true
+    });
+
+    await expect(
+      executeMockSkill(registry, "issue-triage", {
+        trigger: "release"
+      })
+    ).rejects.toThrow("does not accept trigger 'release'");
+  });
+
   it("validates plugin skill paths and names", async () => {
     const registry = await SkillsRegistry.load({
       cwd: "test/fixtures/plugin-project",
