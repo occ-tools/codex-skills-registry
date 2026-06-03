@@ -125,6 +125,36 @@ describe("CLI", () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it("filters doctor findings by changed files", async () => {
+    const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const changedFilesPath = path.join(fixtureRoot, "changed-files.txt");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await import("node:fs/promises").then((fs) =>
+        fs.writeFile(changedFilesPath, ".codex/config.toml\n", "utf8")
+      );
+      await runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        fixtureRoot,
+        "--no-examples",
+        "--changed-files",
+        "changed-files.txt",
+        "doctor",
+        "--strict"
+      ]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(output).toContain("mcp_servers.shell.command");
+      expect(output).not.toContain("bad-skill");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      await rm(changedFilesPath, { force: true });
+    }
+  });
+
   it("emits GitHub annotations to stderr", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -195,6 +225,44 @@ describe("CLI", () => {
       expect(JSON.stringify(parsed)).not.toContain(process.cwd());
     } finally {
       await rm(outFile, { force: true });
+    }
+  });
+
+  it("prints Markdown registry reports", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli(["node", "codex-skills", "--cwd", process.cwd(), "report"]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("# Codex Skills Registry Report");
+    expect(output).toContain("issue-triage");
+  });
+
+  it("writes starter policy files", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-policy-"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        tmp,
+        "init-policy",
+        "--preset",
+        "strict-mcp",
+        "--out",
+        ".codex-skills-registry.yaml"
+      ]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      const content = await readFile(path.join(tmp, ".codex-skills-registry.yaml"), "utf8");
+
+      expect(output).toContain("Wrote registry policy");
+      expect(content).toContain("  - strict-mcp");
+      expect(content).toContain("failOnWarnings: true");
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 

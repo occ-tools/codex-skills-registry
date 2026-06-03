@@ -17,14 +17,18 @@
 - JSON Schema export
 - SARIF locations with repository-relative paths and best-effort line hints
 - reusable GitHub Action support for schema export
+- policy presets and starter policy generation
+- registry report command
+- PR-focused changed-file filtering
+- clean and risky demo projects
 
 ## v0.3
 
-- richer MCP policy checks and deny-list rules
 - first-party fixtures for common OSS workflow templates
 - plugin bundle compatibility checks against real-world example layouts
 - registry index publishing workflow
 - docs site generated from exported registry index
+- richer MCP policy checks and deny-list rules
 
 ## v0.4+
 

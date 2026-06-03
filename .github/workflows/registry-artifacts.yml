@@ -1,0 +1,32 @@
+name: registry-artifacts
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: export registry artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: node dist/cli.js export --out codex-skills-registry-index.json
+      - run: node dist/cli.js report --out codex-skills-registry-report.md
+      - run: node dist/cli.js schema --out codex-skills-registry.schema.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-skills-registry-artifacts
+          path: |
+            codex-skills-registry-index.json
+            codex-skills-registry-report.md
+            codex-skills-registry.schema.json

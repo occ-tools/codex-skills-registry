@@ -1,5 +1,5 @@
 import { z, type ZodType } from "zod";
-import { RegistryPolicySchema } from "./policy.js";
+import { RegistryPolicyInputSchema } from "./policy.js";
 import {
   CodexSkillSchema,
   McpConfigFileSchema,
@@ -64,14 +64,10 @@ const JSON_SCHEMA_DEFINITIONS = [
     title: "Codex Skills Registry Policy",
     description:
       "Project policy file used to make registry validation and MCP audits stricter in CI.",
-    schema: RegistryPolicySchema,
+    schema: RegistryPolicyInputSchema,
     examples: [
       {
-        requirePinnedMcpPackages: true,
-        allowedMcpCommands: ["node", "python", "uvx"],
-        allowedRemoteMcpHosts: ["example.com"],
-        requireExplicitMcpToolPolicy: true,
-        requirePluginSkillPaths: true,
+        extends: ["recommended"],
         failOnWarnings: false
       }
     ]

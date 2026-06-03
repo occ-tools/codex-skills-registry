@@ -1,6 +1,6 @@
 {
   "name": "@wangjiehu/codex-skills-registry",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Validate, index, and test Codex Skills, plugin manifests, and MCP server configs for open-source maintainer workflows.",
   "type": "module",
   "license": "MIT",
@@ -48,6 +48,8 @@
   "files": [
     "dist",
     "examples",
+    "demo",
+    "docs",
     "action.yml",
     ".codex-skills-registry.yaml",
     "README.md",

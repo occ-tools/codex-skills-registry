@@ -22,7 +22,9 @@ npm run dev -- list
 npm run dev -- doctor
 npm run dev -- audit
 npm run dev -- export --out registry-index.json
+npm run dev -- report --out codex-skills-report.md
 npm run dev -- schema --out codex-skills-registry.schema.json
+npm run dev -- init-policy --preset recommended
 ```
 
 ## Pull request expectations
@@ -56,5 +58,5 @@ npm run validate
 - `npm run release:check`
 - update `CHANGELOG.md` when one exists
 - confirm the npm package scope is correct for the publishing account
-- create a semver tag such as `v0.2.0`
+- create a semver tag such as `v0.3.0`
 - push the tag to trigger the release workflow, or publish manually with `npm publish --access public`

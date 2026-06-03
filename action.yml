@@ -1,13 +1,17 @@
 name: Codex Skills Registry
 description: Validate Codex Skills, plugin manifests, and MCP server configs in CI.
 
+branding:
+  icon: shield
+  color: green
+
 inputs:
   path:
     description: Project directory to inspect.
     required: false
     default: .
   command:
-    description: CLI command to run. Supported values are doctor, validate, list, audit, export, and schema.
+    description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, and schema.
     required: false
     default: doctor
   include-examples:
@@ -20,6 +24,10 @@ inputs:
     default: ""
   policy:
     description: Optional registry policy file path, relative to path.
+    required: false
+    default: ""
+  changed-files:
+    description: Optional newline-delimited changed file list, relative to path, for PR-focused output.
     required: false
     default: ""
   format:
@@ -45,6 +53,9 @@ outputs:
   schema-path:
     description: Path to the exported JSON Schema catalog when command is schema.
     value: ${{ steps.run.outputs.schema-path }}
+  report-path:
+    description: Path to the exported Markdown report when command is report.
+    value: ${{ steps.run.outputs.report-path }}
 
 runs:
   using: composite
@@ -66,6 +77,7 @@ runs:
         REGISTRY_INPUT_INCLUDE_EXAMPLES: ${{ inputs.include-examples }}
         REGISTRY_INPUT_CONFIG: ${{ inputs.config }}
         REGISTRY_INPUT_POLICY: ${{ inputs.policy }}
+        REGISTRY_INPUT_CHANGED_FILES: ${{ inputs.changed-files }}
         REGISTRY_INPUT_FORMAT: ${{ inputs.format }}
         REGISTRY_INPUT_STRICT: ${{ inputs.strict }}
         REGISTRY_INPUT_SCHEMA: ${{ inputs.schema }}
@@ -87,6 +99,9 @@ runs:
         fi
         if [[ -n "$REGISTRY_INPUT_POLICY" ]]; then
           args+=(--policy "$REGISTRY_INPUT_POLICY")
+        fi
+        if [[ -n "$REGISTRY_INPUT_CHANGED_FILES" ]]; then
+          args+=(--changed-files "$REGISTRY_INPUT_CHANGED_FILES")
         fi
         args+=(--format "$REGISTRY_INPUT_FORMAT" --github-annotations)
 
@@ -127,6 +142,11 @@ runs:
             out_file="$target_path/codex-skills-registry-index.json"
             node dist/cli.js "${args[@]}" export --out codex-skills-registry-index.json
             echo "index-path=$out_file" >> "$GITHUB_OUTPUT"
+            ;;
+          report)
+            out_file="$target_path/codex-skills-registry-report.md"
+            node dist/cli.js "${args[@]}" report --out codex-skills-registry-report.md
+            echo "report-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           schema)
             out_file="$target_path/codex-skills-registry.schema.json"

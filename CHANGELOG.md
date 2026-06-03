@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Add policy presets and an `init-policy` command.
+- Add Markdown/JSON registry reports through the `report` command.
+- Add PR-focused `--changed-files` filtering for CLI and Action workflows.
+- Add clean and risky demo projects for manual QA and product demos.
+- Add GitHub Action support for report output and changed-file filtering.
+- Add safe local templates for bundled example skill scripts.
+- Add a registry artifact workflow that exports index, report, and schema files.
+
 ## 0.2.0
 
 - Add JSON Schema catalog and named schema export through the CLI and SDK.

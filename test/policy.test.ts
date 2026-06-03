@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadRegistryPolicy } from "../src/policy.js";
+import { formatRegistryPolicyYaml, loadRegistryPolicy, resolveRegistryPolicy } from "../src/policy.js";
 import { SkillsRegistry } from "../src/registry.js";
 
 const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "policy-project");
@@ -33,5 +33,28 @@ describe("policy", () => {
     });
 
     expect(registry.audit().some((issue) => issue.severity === "error")).toBe(true);
+  });
+
+  it("resolves named policy presets with local overrides", () => {
+    const policy = resolveRegistryPolicy({
+      extends: ["recommended"],
+      failOnWarnings: true
+    });
+
+    expect(policy.requirePinnedMcpPackages).toBe(true);
+    expect(policy.requireExplicitMcpToolPolicy).toBe(true);
+    expect(policy.requirePluginSkillPaths).toBe(true);
+    expect(policy.failOnWarnings).toBe(true);
+  });
+
+  it("formats starter policy YAML", () => {
+    const yaml = formatRegistryPolicyYaml({
+      extends: ["recommended"],
+      failOnWarnings: false
+    });
+
+    expect(yaml).toContain("extends:");
+    expect(yaml).toContain("  - recommended");
+    expect(yaml).toContain("failOnWarnings: false");
   });
 });

@@ -30,12 +30,14 @@ release notes, dependency review, and security-oriented automation.
   and MCP server definitions.
 - JSON Schema catalog export for editor validation and downstream CI checks.
 - Portable registry index export with project-relative paths.
+- Policy presets, starter policy generation, PR changed-file filtering, and
+  Markdown registry reports.
 - Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
   source repositories.
 
 ## Status
 
-Version 0.2 validates, indexes, audits, exports schemas for, and mock-runs
+Version 0.3 validates, indexes, audits, exports schemas for, reports on, and mock-runs
 workflow definitions. It does not execute arbitrary skill scripts.
 
 ## Why this exists
@@ -105,8 +107,10 @@ codex-skills run <name> --trigger issue
 codex-skills doctor
 codex-skills audit
 codex-skills export --out registry-index.json
+codex-skills report --out codex-skills-report.md
 codex-skills schema --out codex-skills-registry.schema.json
 codex-skills schema policy --out codex-skills-policy.schema.json
+codex-skills init-policy --preset recommended --out .codex-skills-registry.yaml
 ```
 
 For machine-readable CI output:
@@ -202,6 +206,8 @@ The audit command highlights patterns that deserve maintainer review:
 Maintainers can add `.codex-skills-registry.yaml` to make CI stricter:
 
 ```yaml
+extends:
+  - recommended
 requirePinnedMcpPackages: true
 allowedMcpCommands:
   - node
@@ -214,8 +220,16 @@ requirePluginSkillPaths: true
 failOnWarnings: false
 ```
 
-Policy is intentionally small for v0.1. It should catch review-worthy risks
+Policy is intentionally small. It should catch review-worthy risks
 without pretending to prove that a third-party MCP server is safe.
+
+Use `init-policy` to write a starter policy:
+
+```bash
+codex-skills init-policy --preset recommended --out .codex-skills-registry.yaml
+```
+
+Supported presets are `recommended`, `strict-mcp`, and `plugin-review`.
 
 ## JSON Schema export
 
@@ -269,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.2.0
+      - uses: wangjiehu/codex-skills-registry@v0.3.0
         with:
           path: .
           command: doctor
@@ -294,7 +308,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.2.0
+      - uses: wangjiehu/codex-skills-registry@v0.3.0
         with:
           path: .
           command: doctor
@@ -304,14 +318,14 @@ jobs:
 ```
 
 Supported action commands are `doctor`, `validate`, `list`, `audit`, `export`,
-and `schema`. The action emits GitHub annotations for diagnostics, validation
+`report`, and `schema`. The action emits GitHub annotations for diagnostics, validation
 issues, and audit findings.
 
 To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.2.0
+  uses: wangjiehu/codex-skills-registry@v0.3.0
   with:
     path: .
     command: schema
@@ -322,7 +336,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.2.0
+  uses: wangjiehu/codex-skills-registry@v0.3.0
   continue-on-error: true
   with:
     path: .
@@ -339,6 +353,35 @@ To upload SARIF to GitHub Code Scanning, run:
 The `export` command writes JSON registry indexes. SARIF is currently printed
 to stdout by `doctor`, `audit`, and `validate` when using the CLI directly; the
 GitHub Action captures SARIF to `codex-skills-registry.sarif`.
+
+For PR-focused checks, pass a newline-delimited changed-file list:
+
+```bash
+git diff --name-only origin/main...HEAD > changed-files.txt
+codex-skills doctor --changed-files changed-files.txt
+```
+
+To create a Markdown summary for a CI artifact or repository documentation:
+
+```bash
+codex-skills report --out codex-skills-report.md
+```
+
+The repository also includes a `registry-artifacts` workflow that exports the
+JSON index, Markdown report, and JSON Schema catalog as GitHub Actions
+artifacts.
+
+## Demo projects
+
+The `demo/` directory includes a clean project and a risky project:
+
+```bash
+node dist/cli.js --cwd demo/clean-project --no-examples doctor
+node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
+```
+
+For product planning and launch assets, see `docs/go-to-market.md` and
+`docs/v1-readiness-checklist.md`.
 
 ## SDK
 
@@ -386,7 +429,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.2.0` is pushed.
+Automated releases run when a semver tag such as `v0.3.0` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 
