@@ -30,7 +30,10 @@ export interface MockExecutionResult {
  * @param options - Optional event overrides.
  * @returns Mock webhook-like event.
  */
-export function createMockEvent(skill: CodexSkill, options: MockExecutionOptions = {}): MockWebhookEvent {
+export function createMockEvent(
+  skill: CodexSkill,
+  options: MockExecutionOptions = {},
+): MockWebhookEvent {
   const trigger = options.trigger ?? skill.triggers[0] ?? "manual";
 
   return {
@@ -41,8 +44,8 @@ export function createMockEvent(skill: CodexSkill, options: MockExecutionOptions
     payload: {
       title: defaultTitleForTrigger(trigger),
       number: trigger === "release" ? undefined : 42,
-      ...options.payload
-    }
+      ...options.payload,
+    },
   };
 }
 
@@ -59,7 +62,7 @@ export function createMockEvent(skill: CodexSkill, options: MockExecutionOptions
 export async function executeMockSkill(
   registry: SkillsRegistry,
   skillName: string,
-  options: MockExecutionOptions = {}
+  options: MockExecutionOptions = {},
 ): Promise<MockExecutionResult> {
   const skill = registry.getSkill(skillName);
   if (!skill) {
@@ -68,7 +71,7 @@ export async function executeMockSkill(
 
   if (options.trigger && !skill.triggers.includes(options.trigger)) {
     throw new Error(
-      `Skill '${skillName}' does not accept trigger '${options.trigger}'. Supported triggers: ${skill.triggers.join(", ")}.`
+      `Skill '${skillName}' does not accept trigger '${options.trigger}'. Supported triggers: ${skill.triggers.join(", ")}.`,
     );
   }
 
@@ -77,14 +80,14 @@ export async function executeMockSkill(
     `[mock] ${skill.name} accepted a ${event.trigger} event from ${event.repository}.`,
     `[mock] actor=${event.actor} event_id=${event.id}`,
     `[mock] handler=${skill.entryPoint ?? "instruction-only SKILL.md"}`,
-    `[mock] completed without executing arbitrary code.`
+    `[mock] completed without executing arbitrary code.`,
   ];
 
   return {
     success: true,
     skill,
     event,
-    logs
+    logs,
   };
 }
 

@@ -1,33 +1,51 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { access, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, Option } from "commander";
+import { loadIssueBaselineFile } from "./baseline.js";
+import { filterIssuesByChangedFiles, loadChangedFiles } from "./changed-files.js";
+import { emitGithubAnnotations } from "./cli-output.js";
 import { executeMockSkill } from "./executor.js";
+import {
+  applyIssuePolicyFilters,
+  createIssueBaseline,
+  displayIssueFile,
+  type IssueBaseline,
+  type IssueFilterResult,
+} from "./issues.js";
 import {
   createRegistryJsonSchema,
   createRegistryJsonSchemaCatalog,
   isRegistryJsonSchemaName,
-  listRegistryJsonSchemaNames
+  listRegistryJsonSchemaNames,
 } from "./json-schema.js";
 import {
   formatRegistryPolicyYaml,
   RegistryPolicyPresetSchema,
   type RegistryPolicy,
-  type RegistryPolicyPreset
+  type RegistryPolicyPreset,
 } from "./policy.js";
-import { createRegistryReport, formatRegistryReportMarkdown } from "./report.js";
+import { formatPullRequestComment } from "./pr-comment.js";
+import {
+  createRegistryReport,
+  formatRegistryReportHtml,
+  formatRegistryReportMarkdown,
+} from "./report.js";
 import { SkillsRegistry, formatValidationIssues, type RegistryLoadOptions } from "./registry.js";
+import { explainRegistryRule, listRegistryRules } from "./rules.js";
 import { createSarifLog } from "./sarif.js";
 import { TriggerTypeSchema, type TriggerType, type ValidationIssue } from "./schema.js";
 
-const require = createRequire(import.meta.url);
-const { version: VERSION } = require("../package.json") as { version: string };
+const { version: VERSION } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 interface CliLoadOptions extends RegistryLoadOptions {
   examples?: boolean;
   changedFilesFile?: string;
+  baselineFile?: string;
 }
 
 type OutputFormat = "text" | "json" | "sarif";
@@ -39,8 +57,14 @@ interface CliOutputOptions {
 
 const DEFAULT_OUTPUT_OPTIONS: CliOutputOptions = {
   format: "text",
-  githubAnnotations: false
+  githubAnnotations: false,
 };
+
+interface CliIssueFilterContext {
+  changedFiles?: Set<string>;
+  baseline?: IssueBaseline;
+  baselineDiagnostics: ValidationIssue[];
+}
 
 /**
  * Runs the codex-skills CLI.
@@ -58,6 +82,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("--config <file>", "JSON/YAML file containing additional skill records")
     .option("--policy <file>", "YAML/JSON registry policy file")
     .option("--changed-files <file>", "newline-delimited changed file list for PR-focused output")
+    .option("--baseline <file>", "issue baseline JSON file; defaults to policy baselineFile")
     .option("--no-examples", "exclude the examples/ skill roots under the project directory")
     .option("--format <format>", "output format: text, json, or sarif", "text")
     .option("--github-annotations", "emit GitHub Actions annotations for diagnostics")
@@ -105,7 +130,7 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleValidate(
         name ?? options.name ?? "",
         toLoadOptions(parentOptions),
-        toOutputOptions(parentOptions)
+        toOutputOptions(parentOptions),
       );
     });
 
@@ -115,25 +140,19 @@ export async function runCli(argv = process.argv): Promise<void> {
     .argument("<name>", "skill name")
     .option("--trigger <type>", "mock trigger type")
     .option("--repo <owner/name>", "mock repository", "example/repository")
-    .action(
-      async (
-        name: string,
-        options: { trigger?: string; repo: string },
-        command: Command
-      ) => {
-        const parentOptions = command.parent?.opts() ?? {};
-        const trigger = parseOptionalTrigger(options.trigger);
-        await handleRun(
-          name,
-          toLoadOptions(parentOptions),
-          {
-            trigger,
-            repository: options.repo
-          },
-          toOutputOptions(parentOptions)
-        );
-      }
-    );
+    .action(async (name: string, options: { trigger?: string; repo: string }, command: Command) => {
+      const parentOptions = command.parent?.opts() ?? {};
+      const trigger = parseOptionalTrigger(options.trigger);
+      await handleRun(
+        name,
+        toLoadOptions(parentOptions),
+        {
+          trigger,
+          repository: options.repo,
+        },
+        toOutputOptions(parentOptions),
+      );
+    });
 
   program
     .command("doctor")
@@ -165,12 +184,50 @@ export async function runCli(argv = process.argv): Promise<void> {
     .command("report")
     .description("generate a maintainer-facing registry report")
     .option("-o, --out <file>", "output file; prints to stdout when omitted")
-    .action(async (options: { out?: string }, command: Command) => {
+    .option("--html", "write an HTML report instead of Markdown")
+    .action(async (options: { out?: string; html?: boolean }, command: Command) => {
       await handleReport(
         toLoadOptions(command.parent?.opts() ?? {}),
         options,
-        toOutputOptions(command.parent?.opts() ?? {})
+        toOutputOptions(command.parent?.opts() ?? {}),
       );
+    });
+
+  program
+    .command("pr-comment")
+    .description("generate a pull-request comment summarizing active findings")
+    .option("-o, --out <file>", "output file; prints to stdout when omitted")
+    .option("--max-findings <count>", "maximum findings to include in the comment", "10")
+    .option("--report-path <path>", "report artifact path to include in the comment")
+    .option("--sarif-path <path>", "SARIF artifact path to include in the comment")
+    .action(
+      async (
+        options: { out?: string; maxFindings: string; reportPath?: string; sarifPath?: string },
+        command: Command,
+      ) => {
+        await handlePrComment(
+          toLoadOptions(command.parent?.opts() ?? {}),
+          options,
+          toOutputOptions(command.parent?.opts() ?? {}),
+        );
+      },
+    );
+
+  program
+    .command("baseline")
+    .description("write a baseline file for the current active findings")
+    .option("-o, --out <file>", "output file", "codex-skills-baseline.json")
+    .option("--strict", "include strict audit findings in the baseline")
+    .action(async (options: { out: string; strict?: boolean }, command: Command) => {
+      await handleBaseline(toLoadOptions(command.parent?.opts() ?? {}), options);
+    });
+
+  program
+    .command("explain")
+    .description("explain a registry issue code")
+    .argument("[code]", "issue code such as MCP_UNPINNED_NPX")
+    .action((code: string | undefined) => {
+      handleExplain(code, toOutputOptions(program.opts()));
     });
 
   program
@@ -180,23 +237,25 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("-o, --out <file>", "output file; prints to stdout when omitted")
     .option(
       "--schema <schema>",
-      `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`
+      `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`,
     )
     .action(
       async (
         schema: string | undefined,
         options: { out?: string; schema?: string },
-        command: Command
+        command: Command,
       ) => {
         if (schema && options.schema && schema !== options.schema) {
-          throw new Error("Use either the schema argument or --schema; both values must not differ.");
+          throw new Error(
+            "Use either the schema argument or --schema; both values must not differ.",
+          );
         }
 
         await handleSchema(toLoadOptions(command.parent?.opts() ?? {}), {
           out: options.out,
-          schema: schema ?? options.schema
+          schema: schema ?? options.schema,
         });
-      }
+      },
     );
 
   program
@@ -205,17 +264,14 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option(
       "--preset <preset>",
       "policy preset: recommended, strict-mcp, or plugin-review",
-      "recommended"
+      "recommended",
     )
     .option("-o, --out <file>", "output file; prints to stdout when omitted")
     .option("--force", "overwrite an existing output file")
     .action(
-      async (
-        options: { preset: string; out?: string; force?: boolean },
-        command: Command
-      ) => {
+      async (options: { preset: string; out?: string; force?: boolean }, command: Command) => {
         await handleInitPolicy(toLoadOptions(command.parent?.opts() ?? {}), options);
-      }
+      },
     );
 
   await program.parseAsync(argv);
@@ -223,14 +279,17 @@ export async function runCli(argv = process.argv): Promise<void> {
 
 async function handleList(
   options: CliLoadOptions,
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const changedFiles = await loadChangedFiles(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
+  const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
   if (outputOptions.format === "json") {
     writeJson({
       skills: registry.listSkills(),
-      diagnostics: filterIssuesByChangedFiles(registry.listDiagnostics(), options, changedFiles)
+      diagnostics: issuesForJson(diagnostics.activeIssues, options),
+      suppressedIssues: issuesForJson(diagnostics.suppressedIssues, options),
+      baselineIssues: issuesForJson(diagnostics.baselineIssues, options),
     });
     return;
   }
@@ -242,32 +301,48 @@ async function handleList(
 async function handleValidate(
   name: string,
   options: CliLoadOptions,
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const changedFiles = await loadChangedFiles(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
 
   if (!name) {
     const results = await registry.validateAllSkills();
     const resultList = [...results.entries()].map(([skillName, result]) => ({
       name: skillName,
-      ...result
+      ...result,
     }));
-    const diagnostics = filterIssuesByChangedFiles(registry.listDiagnostics(), options, changedFiles);
-    const issues = filterIssuesByChangedFiles(
+    const diagnostics = filterCliIssues(
+      registry.listDiagnostics(),
+      options,
+      registry,
+      filterContext,
+    );
+    const validationFilter = filterCliIssues(
       resultList.flatMap((result) => result.issues),
       options,
-      changedFiles
+      registry,
+      filterContext,
     );
+    const issues = validationFilter.activeIssues;
     const filteredResultList = resultList.map((result) => {
-      const resultIssues = filterIssuesByChangedFiles(result.issues, options, changedFiles);
+      const resultIssues = filterCliIssues(
+        result.issues,
+        options,
+        registry,
+        filterContext,
+      ).activeIssues;
       return {
         ...result,
         valid: resultIssues.every((issue) => issue.severity !== "error"),
-        issues: resultIssues
+        issues: resultIssues,
       };
     });
-    const allIssues = [...diagnostics, ...issues];
+    const allIssues = [
+      ...filterContext.baselineDiagnostics,
+      ...diagnostics.activeIssues,
+      ...issues,
+    ];
     const hasErrors = allIssues.some((issue) => issue.severity === "error");
 
     if (outputOptions.githubAnnotations) {
@@ -277,14 +352,38 @@ async function handleValidate(
     if (outputOptions.format === "sarif") {
       writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
     } else if (outputOptions.format === "json") {
-      writeJson({ diagnostics, results: filteredResultList });
+      writeJson({
+        diagnostics: issuesForJson(
+          [...filterContext.baselineDiagnostics, ...diagnostics.activeIssues],
+          options,
+        ),
+        results: filteredResultList.map((result) => ({
+          ...result,
+          issues: issuesForJson(result.issues, options),
+        })),
+        suppressedIssues: issuesForJson(
+          [...diagnostics.suppressedIssues, ...validationFilter.suppressedIssues],
+          options,
+        ),
+        baselineIssues: issuesForJson(
+          [...diagnostics.baselineIssues, ...validationFilter.baselineIssues],
+          options,
+        ),
+      });
     } else {
-      if (diagnostics.length > 0) {
+      if (filterContext.baselineDiagnostics.length > 0) {
         console.log("Diagnostics:");
-        console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
+        console.log(
+          formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }),
+        );
       }
 
-      if (resultList.length === 0 && diagnostics.length === 0) {
+      if (diagnostics.activeIssues.length > 0) {
+        console.log("Diagnostics:");
+        console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
+      }
+
+      if (resultList.length === 0 && diagnostics.activeIssues.length === 0) {
         console.log("No registered skills to validate.");
       }
 
@@ -303,9 +402,14 @@ async function handleValidate(
   }
 
   const result = await registry.validateSkillByName(name);
-  const diagnostics = filterIssuesByChangedFiles(registry.listDiagnostics(), options, changedFiles);
-  const resultIssues = filterIssuesByChangedFiles(result.issues, options, changedFiles);
-  const allIssues = [...diagnostics, ...resultIssues];
+  const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+  const resultFilter = filterCliIssues(result.issues, options, registry, filterContext);
+  const resultIssues = resultFilter.activeIssues;
+  const allIssues = [
+    ...filterContext.baselineDiagnostics,
+    ...diagnostics.activeIssues,
+    ...resultIssues,
+  ];
 
   if (outputOptions.githubAnnotations) {
     emitGithubAnnotations(allIssues, options.cwd);
@@ -314,18 +418,42 @@ async function handleValidate(
   if (outputOptions.format === "sarif") {
     writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
-    writeJson({ name, ...result, issues: resultIssues, diagnostics });
+    writeJson({
+      name,
+      ...result,
+      valid: resultIssues.every((issue) => issue.severity !== "error"),
+      issues: issuesForJson(resultIssues, options),
+      diagnostics: issuesForJson(
+        [...filterContext.baselineDiagnostics, ...diagnostics.activeIssues],
+        options,
+      ),
+      suppressedIssues: issuesForJson(
+        [...diagnostics.suppressedIssues, ...resultFilter.suppressedIssues],
+        options,
+      ),
+      baselineIssues: issuesForJson(
+        [...diagnostics.baselineIssues, ...resultFilter.baselineIssues],
+        options,
+      ),
+    });
   } else {
-    if (diagnostics.length > 0) {
+    if (filterContext.baselineDiagnostics.length > 0) {
       console.log("Diagnostics:");
-      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
+      console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
     }
 
-    console.log(`${name}: ${result.valid ? "valid" : "invalid"}`);
+    if (diagnostics.activeIssues.length > 0) {
+      console.log("Diagnostics:");
+      console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
+    }
+
+    console.log(
+      `${name}: ${resultIssues.every((issue) => issue.severity !== "error") ? "valid" : "invalid"}`,
+    );
     console.log(formatValidationIssues(resultIssues, { cwd: options.cwd }));
   }
 
-  if (!result.valid || diagnostics.some((issue) => issue.severity === "error")) {
+  if (shouldFail(allIssues, registry.getPolicy())) {
     process.exitCode = 1;
   }
 }
@@ -334,7 +462,7 @@ async function handleRun(
   name: string,
   options: CliLoadOptions,
   executionOptions: { trigger?: TriggerType; repository?: string } = {},
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
   const result = await executeMockSkill(registry, name, executionOptions);
@@ -351,39 +479,65 @@ async function handleRun(
 async function handleDoctor(
   options: CliLoadOptions,
   doctorOptions: { strict?: boolean } = {},
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const changedFiles = await loadChangedFiles(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
   const validationResults = await registry.validateAllSkills();
   const rawValidationIssues = [...validationResults.entries()].flatMap(([skillName, result]) =>
     result.issues.map((issue) => ({
       ...issue,
-      path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`
-    }))
+      path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`,
+    })),
   );
   const invalid = [...validationResults.values()].filter((result) => !result.valid);
-  const diagnostics = filterIssuesByChangedFiles(registry.listDiagnostics(), options, changedFiles);
-  const auditIssues = filterIssuesByChangedFiles(
+  const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+  const auditFilter = filterCliIssues(
     registry.audit({ strict: doctorOptions.strict }),
     options,
-    changedFiles
+    registry,
+    filterContext,
   );
-  const validationIssues = filterIssuesByChangedFiles(rawValidationIssues, options, changedFiles);
-  const allIssues = [...diagnostics, ...validationIssues, ...auditIssues];
+  const validationFilter = filterCliIssues(rawValidationIssues, options, registry, filterContext);
+  const auditIssues = auditFilter.activeIssues;
+  const validationIssues = validationFilter.activeIssues;
+  const allIssues = [
+    ...filterContext.baselineDiagnostics,
+    ...diagnostics.activeIssues,
+    ...validationIssues,
+    ...auditIssues,
+  ];
   const report = {
     summary: {
       skills: registry.listSkills().length,
       invalidSkills: invalid.length,
       mcpServers: registry.listMcpServers().length,
       plugins: registry.listPlugins().length,
-      auditIssues: auditIssues.length
+      auditIssues: auditIssues.length,
+      suppressedIssues:
+        diagnostics.suppressedIssues.length +
+        validationFilter.suppressedIssues.length +
+        auditFilter.suppressedIssues.length,
+      baselineIssues:
+        diagnostics.baselineIssues.length +
+        validationFilter.baselineIssues.length +
+        auditFilter.baselineIssues.length,
     },
     policy: registry.getPolicy(),
     policyPath: registry.getPolicyPath(),
-    diagnostics,
+    diagnostics: [...filterContext.baselineDiagnostics, ...diagnostics.activeIssues],
     validationIssues,
-    auditIssues
+    auditIssues,
+    suppressedIssues: [
+      ...diagnostics.suppressedIssues,
+      ...validationFilter.suppressedIssues,
+      ...auditFilter.suppressedIssues,
+    ],
+    baselineIssues: [
+      ...diagnostics.baselineIssues,
+      ...validationFilter.baselineIssues,
+      ...auditFilter.baselineIssues,
+    ],
   };
 
   if (outputOptions.githubAnnotations) {
@@ -393,18 +547,29 @@ async function handleDoctor(
   if (outputOptions.format === "sarif") {
     writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
-    writeJson(report);
+    writeJson({
+      ...report,
+      diagnostics: issuesForJson(report.diagnostics, options),
+      validationIssues: issuesForJson(report.validationIssues, options),
+      auditIssues: issuesForJson(report.auditIssues, options),
+      suppressedIssues: issuesForJson(report.suppressedIssues, options),
+      baselineIssues: issuesForJson(report.baselineIssues, options),
+    });
   } else {
-    console.log(`Skills: ${report.summary.skills} registered, ${report.summary.invalidSkills} invalid`);
+    console.log(
+      `Skills: ${report.summary.skills} registered, ${report.summary.invalidSkills} invalid`,
+    );
     console.log(`MCP servers: ${report.summary.mcpServers} discovered`);
     console.log(`Plugins: ${report.summary.plugins} discovered`);
     console.log(
-      `Audit: ${report.summary.auditIssues} issue${report.summary.auditIssues === 1 ? "" : "s"} found`
+      `Audit: ${report.summary.auditIssues} issue${report.summary.auditIssues === 1 ? "" : "s"} found`,
     );
+    console.log(`Suppressed: ${report.summary.suppressedIssues}`);
+    console.log(`Baseline: ${report.summary.baselineIssues}`);
 
-    if (diagnostics.length > 0) {
+    if (report.diagnostics.length > 0) {
       console.log("\nDiagnostics:");
-      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
+      console.log(formatValidationIssues(report.diagnostics, { cwd: options.cwd }));
     }
 
     if (validationIssues.length > 0) {
@@ -426,17 +591,23 @@ async function handleDoctor(
 async function handleAudit(
   options: CliLoadOptions,
   auditOptions: { strict?: boolean } = {},
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   const registry = await SkillsRegistry.load(options);
-  const changedFiles = await loadChangedFiles(options);
-  const diagnostics = filterIssuesByChangedFiles(registry.listDiagnostics(), options, changedFiles);
-  const auditIssues = filterIssuesByChangedFiles(
+  const filterContext = await createCliIssueFilterContext(options, registry);
+  const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+  const auditFilter = filterCliIssues(
     registry.audit({ strict: auditOptions.strict }),
     options,
-    changedFiles
+    registry,
+    filterContext,
   );
-  const issues = [...diagnostics, ...auditIssues];
+  const auditIssues = auditFilter.activeIssues;
+  const issues = [
+    ...filterContext.baselineDiagnostics,
+    ...diagnostics.activeIssues,
+    ...auditIssues,
+  ];
 
   if (outputOptions.githubAnnotations) {
     emitGithubAnnotations(issues, options.cwd);
@@ -446,23 +617,42 @@ async function handleAudit(
     writeJson(createSarifLog(issues, { cwd: options.cwd }));
   } else if (outputOptions.format === "json") {
     writeJson({
-      diagnostics,
-      issues: auditIssues,
+      diagnostics: issuesForJson(
+        [...filterContext.baselineDiagnostics, ...diagnostics.activeIssues],
+        options,
+      ),
+      issues: issuesForJson(auditIssues, options),
+      suppressedIssues: issuesForJson(
+        [...diagnostics.suppressedIssues, ...auditFilter.suppressedIssues],
+        options,
+      ),
+      baselineIssues: issuesForJson(
+        [...diagnostics.baselineIssues, ...auditFilter.baselineIssues],
+        options,
+      ),
       policy: registry.getPolicy(),
-      policyPath: registry.getPolicyPath()
+      policyPath: registry.getPolicyPath(),
     });
   } else {
-    if (diagnostics.length > 0) {
+    if (filterContext.baselineDiagnostics.length > 0) {
       console.log("Diagnostics:");
-      console.log(formatValidationIssues(diagnostics, { cwd: options.cwd }));
+      console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
+    }
+
+    if (diagnostics.activeIssues.length > 0) {
+      console.log("Diagnostics:");
+      console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
     }
 
     if (auditIssues.length > 0) {
-      if (diagnostics.length > 0) {
+      if (diagnostics.activeIssues.length > 0 || filterContext.baselineDiagnostics.length > 0) {
         console.log("\nAudit:");
       }
       console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
-    } else if (diagnostics.length === 0) {
+    } else if (
+      diagnostics.activeIssues.length === 0 &&
+      filterContext.baselineDiagnostics.length === 0
+    ) {
       console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
     }
   }
@@ -488,21 +678,24 @@ async function handleExport(options: CliLoadOptions, outFile?: string): Promise<
 
 async function handleReport(
   options: CliLoadOptions,
-  reportOptions: { out?: string },
-  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS
+  reportOptions: { out?: string; html?: boolean },
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   rejectSarifFor("report", outputOptions);
   const registry = await SkillsRegistry.load(options);
-  const changedFiles = await loadChangedFiles(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
   const index = registry.toIndex({ relativePaths: true });
+  const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
   const report = createRegistryReport({
     ...index,
-    diagnostics: filterIssuesByChangedFiles(index.diagnostics, options, changedFiles)
+    diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
   });
   const output =
     outputOptions.format === "json"
       ? `${JSON.stringify(report, null, 2)}\n`
-      : formatRegistryReportMarkdown(report);
+      : reportOptions.html
+        ? formatRegistryReportHtml(report)
+        : formatRegistryReportMarkdown(report);
 
   if (!reportOptions.out) {
     console.log(output);
@@ -514,9 +707,81 @@ async function handleReport(
   console.log(`Wrote registry report to ${outputPath}`);
 }
 
+async function handlePrComment(
+  options: CliLoadOptions,
+  commentOptions: { out?: string; maxFindings: string; reportPath?: string; sarifPath?: string },
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
+): Promise<void> {
+  rejectSarifFor("pr-comment", outputOptions);
+  const registry = await SkillsRegistry.load(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
+  const index = registry.toIndex({ relativePaths: true });
+  const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
+  const report = createRegistryReport({
+    ...index,
+    diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
+  });
+  const output =
+    outputOptions.format === "json"
+      ? `${JSON.stringify(
+          {
+            report,
+            suppressedIssues: filteredDiagnostics.suppressedIssues,
+            baselineIssues: filteredDiagnostics.baselineIssues,
+          },
+          null,
+          2,
+        )}\n`
+      : formatPullRequestComment(report, {
+          maxFindings: parsePositiveInt(commentOptions.maxFindings, "max-findings"),
+          suppressedCount: filteredDiagnostics.suppressedIssues.length,
+          baselineCount: filteredDiagnostics.baselineIssues.length,
+          reportPath: commentOptions.reportPath,
+          sarifPath: commentOptions.sarifPath,
+        });
+
+  if (!commentOptions.out) {
+    console.log(output);
+    return;
+  }
+
+  const outputPath = path.resolve(options.cwd ?? process.cwd(), commentOptions.out);
+  await writeFile(outputPath, output, "utf8");
+  console.log(`Wrote pull request comment to ${outputPath}`);
+}
+
+async function handleBaseline(
+  options: CliLoadOptions,
+  baselineOptions: { out: string; strict?: boolean },
+): Promise<void> {
+  const registry = await SkillsRegistry.load(options);
+  const validationResults = await registry.validateAllSkills();
+  const validationIssues = [...validationResults.entries()].flatMap(([skillName, result]) =>
+    result.issues.map((issue) => ({
+      ...issue,
+      path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`,
+    })),
+  );
+  const rawIssues = [
+    ...registry.listDiagnostics(),
+    ...validationIssues,
+    ...registry.audit({ strict: baselineOptions.strict }),
+  ];
+  const filterContext: CliIssueFilterContext = {
+    changedFiles: await loadChangedFiles(options),
+    baselineDiagnostics: [],
+  };
+  const filtered = filterCliIssues(rawIssues, options, registry, filterContext);
+  const baseline = createIssueBaseline(filtered.activeIssues, { cwd: options.cwd });
+  const outputPath = path.resolve(options.cwd ?? process.cwd(), baselineOptions.out);
+
+  await writeFile(outputPath, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+  console.log(`Wrote ${baseline.issues.length} baseline finding(s) to ${outputPath}`);
+}
+
 async function handleSchema(
   options: CliLoadOptions,
-  schemaOptions: { out?: string; schema?: string }
+  schemaOptions: { out?: string; schema?: string },
 ): Promise<void> {
   const schema = schemaOptions.schema
     ? createNamedJsonSchema(schemaOptions.schema)
@@ -535,12 +800,12 @@ async function handleSchema(
 
 async function handleInitPolicy(
   options: CliLoadOptions,
-  policyOptions: { preset: string; out?: string; force?: boolean }
+  policyOptions: { preset: string; out?: string; force?: boolean },
 ): Promise<void> {
   const preset = parsePolicyPreset(policyOptions.preset);
   const yaml = formatRegistryPolicyYaml({
     extends: [preset],
-    failOnWarnings: preset === "strict-mcp"
+    failOnWarnings: preset === "strict-mcp",
   });
 
   if (!policyOptions.out) {
@@ -551,7 +816,7 @@ async function handleInitPolicy(
   const outputPath = path.resolve(options.cwd ?? process.cwd(), policyOptions.out);
   if (!policyOptions.force) {
     try {
-      await import("node:fs/promises").then((fs) => fs.access(outputPath));
+      await access(outputPath);
       throw new Error(`Policy file already exists at ${outputPath}. Use --force to overwrite.`);
     } catch (error) {
       if (error instanceof Error && error.message.includes("already exists")) {
@@ -564,10 +829,42 @@ async function handleInitPolicy(
   console.log(`Wrote registry policy to ${outputPath}`);
 }
 
+function handleExplain(
+  code: string | undefined,
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
+): void {
+  rejectSarifFor("explain", outputOptions);
+
+  if (!code) {
+    const rules = listRegistryRules();
+    if (outputOptions.format === "json") {
+      writeJson({ rules });
+      return;
+    }
+
+    console.log(rules.map((rule) => `${rule.code}: ${rule.title}`).join("\n"));
+    return;
+  }
+
+  const rule = explainRegistryRule(code);
+  if (!rule) {
+    throw new Error(`Unknown issue code '${code}'. Run codex-skills explain to list known codes.`);
+  }
+
+  if (outputOptions.format === "json") {
+    writeJson(rule);
+    return;
+  }
+
+  console.log(`${rule.code}: ${rule.title}`);
+  console.log(rule.description);
+  console.log(`Remediation: ${rule.remediation}`);
+}
+
 function createNamedJsonSchema(name: string): Record<string, unknown> {
   if (!isRegistryJsonSchemaName(name)) {
     throw new Error(
-      `Unknown schema '${name}'. Supported schemas are: ${listRegistryJsonSchemaNames().join(", ")}.`
+      `Unknown schema '${name}'. Supported schemas are: ${listRegistryJsonSchemaNames().join(", ")}.`,
     );
   }
 
@@ -584,7 +881,8 @@ function toLoadOptions(options: Record<string, unknown>): CliLoadOptions {
     configFile: typeof options.config === "string" ? options.config : undefined,
     policyFile: typeof options.policy === "string" ? options.policy : undefined,
     includeExamples: options.examples !== false,
-    changedFilesFile: typeof options.changedFiles === "string" ? options.changedFiles : undefined
+    changedFilesFile: typeof options.changedFiles === "string" ? options.changedFiles : undefined,
+    baselineFile: typeof options.baseline === "string" ? options.baseline : undefined,
   };
 }
 
@@ -596,7 +894,7 @@ function toOutputOptions(options: Record<string, unknown>): CliOutputOptions {
 
   return {
     format,
-    githubAnnotations: options.githubAnnotations === true
+    githubAnnotations: options.githubAnnotations === true,
   };
 }
 
@@ -606,118 +904,95 @@ function writeJson(value: unknown): void {
 
 function rejectSarifFor(command: string, outputOptions: CliOutputOptions): void {
   if (outputOptions.format === "sarif") {
-    throw new Error(`SARIF output is not supported for '${command}'. Use doctor, audit, or validate.`);
-  }
-}
-
-function shouldFail(issues: ValidationIssue[], policy: RegistryPolicy): boolean {
-  return issues.some((issue) => issue.severity === "error") || (policy.failOnWarnings && issues.length > 0);
-}
-
-async function loadChangedFiles(options: CliLoadOptions): Promise<Set<string> | undefined> {
-  if (!options.changedFilesFile) {
-    return undefined;
-  }
-
-  const filePath = path.resolve(options.cwd ?? process.cwd(), options.changedFilesFile);
-  const content = await readFile(filePath, "utf8");
-  const values = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"))
-    .map(normalizeChangedFilePath);
-
-  return new Set(values);
-}
-
-function filterIssuesByChangedFiles(
-  issues: ValidationIssue[],
-  options: CliLoadOptions,
-  changedFiles: Set<string> | undefined
-): ValidationIssue[] {
-  if (!changedFiles) {
-    return issues;
-  }
-
-  return issues.filter((issue) => issueMatchesChangedFiles(issue, options, changedFiles));
-}
-
-function issueMatchesChangedFiles(
-  issue: ValidationIssue,
-  options: CliLoadOptions,
-  changedFiles: Set<string>
-): boolean {
-  if (!issue.file) {
-    return true;
-  }
-
-  const relative = path.isAbsolute(issue.file)
-    ? path.relative(path.resolve(options.cwd ?? process.cwd()), issue.file)
-    : issue.file;
-  return changedFiles.has(normalizeChangedFilePath(relative));
-}
-
-function normalizeChangedFilePath(filePath: string): string {
-  return filePath.replace(/\\/g, "/").replace(/^\.\//, "");
-}
-
-function emitGithubAnnotations(issues: ValidationIssue[], cwd?: string): void {
-  for (const issue of issues) {
-    const command = issue.severity === "error" ? "error" : "warning";
-    const file = issueFile(issue, cwd);
-    const line = issueLine(issue);
-    const properties = [
-      file ? `file=${escapeAnnotationProperty(file)}` : undefined,
-      line ? `line=${line}` : undefined,
-      `title=${escapeAnnotationProperty(issueTitle(issue, cwd))}`
-    ].filter(Boolean);
-    console.error(
-      `::${command} ${properties.join(",")}::${escapeAnnotationMessage(issue.message)}`
+    throw new Error(
+      `SARIF output is not supported for '${command}'. Use doctor, audit, or validate.`,
     );
   }
 }
 
-function issueFile(issue: ValidationIssue, cwd?: string): string | undefined {
-  const candidate = issue.file;
-  if (typeof candidate !== "string") {
-    return undefined;
-  }
-
-  if (cwd && path.isAbsolute(candidate)) {
-    const relative = path.relative(path.resolve(cwd), path.resolve(candidate));
-    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
-      return relative.replace(/\\/g, "/");
-    }
-  }
-
-  return candidate.replace(/\\/g, "/");
+function shouldFail(issues: ValidationIssue[], policy: RegistryPolicy): boolean {
+  return (
+    issues.some((issue) => issue.severity === "error") ||
+    (policy.failOnWarnings && issues.length > 0)
+  );
 }
 
-function issueLine(issue: ValidationIssue): number | undefined {
-  return typeof issue.line === "number" && Number.isInteger(issue.line) && issue.line > 0
-    ? issue.line
-    : undefined;
+function issueForJson(issue: ValidationIssue, options: CliLoadOptions): ValidationIssue {
+  const file = displayIssueFile(issue, options.cwd);
+  const pathValue =
+    issue.file && file
+      ? issue.path.replace(issue.file, file).replace(/\\/g, "/")
+      : issue.path.replace(/\\/g, "/");
+
+  return {
+    ...issue,
+    path: pathValue,
+    ...(file ? { file } : issue.file ? { file: issue.file.replace(/\\/g, "/") } : {}),
+  };
 }
 
-function issueTitle(issue: ValidationIssue, cwd?: string): string {
-  if (!issue.file || !cwd || !path.isAbsolute(issue.file)) {
-    return issue.path.replace(/\\/g, "/");
+function issuesForJson(issues: ValidationIssue[], options: CliLoadOptions): ValidationIssue[] {
+  return issues.map((issue) => issueForJson(issue, options));
+}
+
+async function createCliIssueFilterContext(
+  options: CliLoadOptions,
+  registry: SkillsRegistry,
+): Promise<CliIssueFilterContext> {
+  const changedFiles = await loadChangedFiles(options);
+  const baselineFile = options.baselineFile ?? registry.getPolicy().baselineFile;
+
+  if (!baselineFile) {
+    return {
+      changedFiles,
+      baselineDiagnostics: [],
+    };
   }
 
-  const relative = path.relative(path.resolve(cwd), path.resolve(issue.file));
-  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
-    return issue.path.replace(issue.file, relative.replace(/\\/g, "/"));
+  try {
+    return {
+      changedFiles,
+      baseline: await loadIssueBaselineFile(options.cwd ?? process.cwd(), baselineFile),
+      baselineDiagnostics: [],
+    };
+  } catch (error) {
+    return {
+      changedFiles,
+      baselineDiagnostics: [
+        {
+          severity: "error",
+          code: "BASELINE_LOAD_FAILED",
+          path: baselineFile,
+          file: baselineFile,
+          message: error instanceof Error ? error.message : String(error),
+          help: "Regenerate the baseline with codex-skills baseline or fix the baselineFile path.",
+        },
+      ],
+    };
+  }
+}
+
+function filterCliIssues(
+  issues: ValidationIssue[],
+  options: CliLoadOptions,
+  registry: SkillsRegistry,
+  context: CliIssueFilterContext,
+): IssueFilterResult {
+  const changedFiltered = filterIssuesByChangedFiles(issues, options, context.changedFiles);
+  return applyIssuePolicyFilters(changedFiltered, {
+    policy: registry.getPolicy(),
+    cwd: options.cwd,
+    baseline: context.baseline,
+  });
+}
+
+function parsePositiveInt(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer.`);
   }
 
-  return issue.path.replace(/\\/g, "/");
-}
-
-function escapeAnnotationProperty(value: string): string {
-  return value.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/,/g, "%2C");
-}
-
-function escapeAnnotationMessage(value: string): string {
-  return value.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  return parsed;
 }
 
 function parseOptionalTrigger(value: string | undefined): TriggerType | undefined {

@@ -1,0 +1,7 @@
+{
+  "external_docs": {
+    "command": "node",
+    "args": ["server.js"],
+    "enabled_tools": ["search"]
+  }
+}

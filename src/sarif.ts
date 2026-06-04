@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { ValidationIssue } from "./schema.js";
+import { relativePathInside } from "./utils.js";
 
 export interface SarifOptions {
   cwd?: string;
@@ -34,19 +35,19 @@ interface SarifResult {
  */
 export function createSarifLog(
   issues: ValidationIssue[],
-  options: SarifOptions = {}
+  options: SarifOptions = {},
 ): Record<string, unknown> {
   const rules = new Map<string, { id: string; name: string; shortDescription: { text: string } }>();
   const results: SarifResult[] = issues.map((issue) => {
     const ruleName = ruleNameForIssue(issue, options.cwd);
-    const ruleId = ruleIdForIssue(ruleName);
+    const ruleId = issue.code ?? ruleIdForIssue(ruleName);
     if (!rules.has(ruleId)) {
       rules.set(ruleId, {
         id: ruleId,
         name: ruleName,
         shortDescription: {
-          text: ruleName
-        }
+          text: ruleName,
+        },
       });
     }
 
@@ -55,43 +56,52 @@ export function createSarifLog(
       ruleId,
       level: issue.severity === "error" ? "error" : "warning",
       message: {
-        text: issue.message
+        text: issue.help ? `${issue.message} ${issue.help}` : issue.message,
       },
       ...(file
         ? {
             locations: [
               {
-                  physicalLocation: {
-                    artifactLocation: {
-                    uri: toSarifUri(file, options.cwd)
+                physicalLocation: {
+                  artifactLocation: {
+                    uri: toSarifUri(file, options.cwd),
                   },
                   region: {
-                    startLine: issueLine(issue)
-                  }
-                }
-              }
-            ]
+                    startLine: issueLine(issue),
+                  },
+                },
+              },
+            ],
           }
-        : {})
+        : {}),
     };
   });
 
   return {
     version: "2.1.0",
-    $schema:
-      "https://json.schemastore.org/sarif-2.1.0.json",
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
     runs: [
       {
         tool: {
           driver: {
             name: "codex-skills-registry",
-            rules: [...rules.values()]
-          }
+            rules: [...rules.values()],
+          },
         },
-        results
-      }
-    ]
+        results,
+      },
+    ],
   };
+}
+
+function ruleIdForIssue(ruleName: string): string {
+  return (
+    ruleName
+      .replace(/^[A-Za-z]:[\\/]/, "")
+      .replace(/[^A-Za-z0-9._-]+/g, ".")
+      .replace(/^\.+|\.+$/g, "")
+      .slice(0, 120) || "registry.issue"
+  );
 }
 
 function ruleNameForIssue(issue: ValidationIssue, cwd?: string): string {
@@ -100,15 +110,9 @@ function ruleNameForIssue(issue: ValidationIssue, cwd?: string): string {
   }
 
   const relativeFile = relativePathInside(path.resolve(cwd), path.resolve(issue.file));
-  return relativeFile ? issue.path.replace(issue.file, relativeFile.replace(/\\/g, "/")) : issue.path;
-}
-
-function ruleIdForIssue(ruleName: string): string {
-  return ruleName
-    .replace(/^[A-Za-z]:[\\/]/, "")
-    .replace(/[^A-Za-z0-9._-]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-    .slice(0, 120) || "registry.issue";
+  return relativeFile
+    ? issue.path.replace(issue.file, relativeFile.replace(/\\/g, "/"))
+    : issue.path;
 }
 
 function issueFile(issue: ValidationIssue): string | undefined {
@@ -131,9 +135,4 @@ function toSarifUri(filePath: string, cwd?: string): string {
   }
 
   return path.normalize(filePath).replace(/\\/g, "/");
-}
-
-function relativePathInside(root: string, candidate: string): string | undefined {
-  const relative = path.relative(root, candidate);
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : undefined;
 }

@@ -1,9 +1,13 @@
 node_modules/
-dist/
 coverage/
 .npm-cache/
 registry-index.json
 codex-skills-registry.schema.json
 codex-skills-registry.sarif
+codex-skills-registry-report.md
+codex-skills-registry-pr-comment.md
+codex-skills-registry-summary.json
+codex-skills-baseline.json
+codex-skills-report.html
 .env
 *.log

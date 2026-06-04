@@ -10,7 +10,7 @@ export const TriggerTypeSchema = z.enum([
   "release",
   "manual",
   "security",
-  "dependency"
+  "dependency",
 ]);
 
 export type TriggerType = z.infer<typeof TriggerTypeSchema>;
@@ -21,17 +21,18 @@ export const SkillNameSchema = z
   .max(80)
   .regex(/^[a-z0-9][a-z0-9._-]*$/, {
     message:
-      "Use lowercase letters, numbers, dots, underscores, or hyphens; start with a letter or number."
+      "Use lowercase letters, numbers, dots, underscores, or hyphens; start with a letter or number.",
   });
 
 const SemverishSchema = z.string().regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, {
-  message: "Expected a semver-like version such as 0.1.0 or 1.0.0-beta.1."
+  message: "Expected a semver-like version such as 0.1.0 or 1.0.0-beta.1.",
 });
 
 /**
  * Frontmatter accepted in a Codex Skill SKILL.md file. Codex itself requires
  * name and description; this project accepts extra maintainer metadata for
- * registry, CI, and mock execution workflows.
+ * registry, CI, and mock execution workflows. Extra frontmatter fields are
+ * preserved here and then normalized into the strict registry shape below.
  */
 export const SkillFrontmatterSchema = z
   .object({
@@ -42,7 +43,7 @@ export const SkillFrontmatterSchema = z
     triggers: z.array(TriggerTypeSchema).min(1).optional(),
     triggerType: TriggerTypeSchema.optional(),
     entryPoint: z.string().min(1).optional(),
-    tags: z.array(z.string().min(1)).optional()
+    tags: z.array(z.string().min(1)).optional(),
   })
   .passthrough();
 
@@ -65,7 +66,7 @@ export const CodexSkillSchema = z
     skillFile: z.string().optional(),
     source: z.enum(["project", "example", "plugin", "config", "inline"]).default("inline"),
     tags: z.array(z.string()).default([]),
-    metadata: z.record(z.string(), z.unknown()).default({})
+    metadata: z.record(z.string(), z.unknown()).default({}),
   })
   .strict();
 
@@ -75,7 +76,7 @@ const ApprovalModeSchema = z.enum(["prompt", "approve", "reject", "always", "nev
 
 const McpToolPolicySchema = z
   .object({
-    approval_mode: ApprovalModeSchema.optional()
+    approval_mode: ApprovalModeSchema.optional(),
   })
   .passthrough();
 
@@ -88,7 +89,7 @@ const BaseMcpServerConfigSchema = z
     enabled_tools: z.array(z.string().min(1)).optional(),
     disabled_tools: z.array(z.string().min(1)).optional(),
     default_tools_approval_mode: ApprovalModeSchema.optional(),
-    tools: z.record(z.string(), McpToolPolicySchema).optional()
+    tools: z.record(z.string(), McpToolPolicySchema).optional(),
   })
   .passthrough();
 
@@ -103,21 +104,21 @@ export const StdioMcpServerConfigSchema = BaseMcpServerConfigSchema.extend({
         z
           .object({
             name: z.string().min(1),
-            source: z.enum(["local", "remote"]).optional()
+            source: z.enum(["local", "remote"]).optional(),
           })
-          .passthrough()
-      ])
+          .passthrough(),
+      ]),
     )
     .optional(),
   cwd: z.string().optional(),
-  experimental_environment: z.enum(["remote"]).optional()
+  experimental_environment: z.enum(["remote"]).optional(),
 });
 
 export const HttpMcpServerConfigSchema = BaseMcpServerConfigSchema.extend({
   url: z.string().url(),
   bearer_token_env_var: z.string().min(1).optional(),
   http_headers: z.record(z.string(), z.string()).optional(),
-  env_http_headers: z.record(z.string(), z.string()).optional()
+  env_http_headers: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -127,21 +128,21 @@ export const HttpMcpServerConfigSchema = BaseMcpServerConfigSchema.extend({
  */
 export const McpServerConfigSchema = z.union([
   StdioMcpServerConfigSchema,
-  HttpMcpServerConfigSchema
+  HttpMcpServerConfigSchema,
 ]);
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
 export const McpConfigFileSchema = z
   .object({
-    mcp_servers: z.record(z.string(), McpServerConfigSchema).default({})
+    mcp_servers: z.record(z.string(), McpServerConfigSchema).default({}),
   })
   .passthrough();
 
 export type McpConfigFile = z.infer<typeof McpConfigFileSchema>;
 
 const ManifestPathSchema = z.string().regex(/^\.\//, {
-  message: "Manifest component paths should be relative to the plugin root and start with './'."
+  message: "Manifest component paths should be relative to the plugin root and start with './'.",
 });
 
 export const PluginSkillReferenceSchema = z.union([
@@ -149,9 +150,9 @@ export const PluginSkillReferenceSchema = z.union([
   z
     .object({
       name: SkillNameSchema.optional(),
-      path: z.string().min(1)
+      path: z.string().min(1),
     })
-    .passthrough()
+    .passthrough(),
 ]);
 
 export const PluginSkillsSchema = z
@@ -164,7 +165,11 @@ export const PluginMcpServersSchema = z
 
 export const PluginManifestSchema = z
   .object({
-    name: z.string().min(1).max(120).regex(/^[a-z0-9@/._-]+$/),
+    name: z
+      .string()
+      .min(1)
+      .max(120)
+      .regex(/^[a-z0-9@/._-]+$/),
     version: SemverishSchema,
     description: z.string().optional(),
     author: z
@@ -174,9 +179,9 @@ export const PluginManifestSchema = z
           .object({
             name: z.string().min(1),
             email: z.string().email().optional(),
-            url: z.string().url().optional()
+            url: z.string().url().optional(),
           })
-          .passthrough()
+          .passthrough(),
       ])
       .optional(),
     homepage: z.string().url().optional(),
@@ -188,7 +193,7 @@ export const PluginManifestSchema = z
     apps: ManifestPathSchema.optional(),
     hooks: z.unknown().optional(),
     interface: z.record(z.string(), z.unknown()).optional(),
-    mcp_servers: z.record(z.string(), McpServerConfigSchema).default({})
+    mcp_servers: z.record(z.string(), McpServerConfigSchema).default({}),
   })
   .passthrough();
 
@@ -198,8 +203,10 @@ export type ValidationSeverity = "error" | "warning";
 
 export interface ValidationIssue {
   severity: ValidationSeverity;
+  code?: string;
   path: string;
   message: string;
+  help?: string;
   file?: string;
   line?: number;
 }
@@ -219,8 +226,9 @@ export interface ValidationResult {
 export function zodErrorToIssues(error: ZodError, basePath = "$"): ValidationIssue[] {
   return error.issues.map((issue) => ({
     severity: "error",
+    code: "SCHEMA_VALIDATION_FAILED",
     path: [basePath, ...issue.path.map(String)].filter(Boolean).join("."),
-    message: issue.message
+    message: issue.message,
   }));
 }
 
@@ -235,15 +243,19 @@ export function zodErrorToIssues(error: ZodError, basePath = "$"): ValidationIss
  */
 export function normalizeSkillInput(
   input: unknown,
-  defaults: Partial<CodexSkill> = {}
+  defaults: Partial<CodexSkill> = {},
 ): CodexSkill {
   const record = z.record(z.string(), z.unknown()).parse(input);
+  const triggers = Array.isArray(record.triggers)
+    ? record.triggers
+    : typeof record.triggerType === "string"
+      ? [record.triggerType]
+      : undefined;
   const aliased = {
     ...record,
     name: record.name ?? record.skillName,
-    triggers:
-      record.triggers ?? (typeof record.triggerType === "string" ? [record.triggerType] : undefined),
-    entryPoint: record.entryPoint ?? record.entry_point
+    triggers,
+    entryPoint: record.entryPoint ?? record.entry_point,
   };
 
   const frontmatter = SkillFrontmatterSchema.parse(aliased);
@@ -254,14 +266,12 @@ export function normalizeSkillInput(
     description: frontmatter.description,
     version: frontmatter.version ?? defaults.version,
     author: frontmatter.author ?? defaults.author,
-    triggers:
-      frontmatter.triggers ??
-      (frontmatter.triggerType ? [frontmatter.triggerType] : defaults.triggers),
+    triggers: frontmatter.triggers ?? defaults.triggers,
     entryPoint: frontmatter.entryPoint ?? defaults.entryPoint,
     tags: frontmatter.tags ?? defaults.tags,
     metadata: {
       ...(defaults.metadata ?? {}),
-      frontmatter
-    }
+      frontmatter,
+    },
   });
 }

@@ -1,0 +1,9 @@
+import type { CodexSkill } from "./schema.js";
+export declare function pathExists(filePath: string): Promise<boolean>;
+export declare function firstExistingPath(candidates: string[]): Promise<string | undefined>;
+export declare function isSubpath(root: string, candidate: string): boolean;
+export declare function relativePathInside(root: string, candidate: string): string | undefined;
+export declare function skillLine(skill: CodexSkill, field: string): number | undefined;
+export declare function escapeRegExp(value: string): string;
+export declare function countChar(value: string, target: string): number;
+export declare function normalizeRepoPath(filePath: string): string;

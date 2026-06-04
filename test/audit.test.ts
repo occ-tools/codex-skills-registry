@@ -12,7 +12,7 @@ describe("audit", () => {
       entryPoint: "../outside.js",
       source: "inline",
       tags: [],
-      metadata: {}
+      metadata: {},
     };
 
     const issues = auditSkill(skill);
@@ -27,11 +27,14 @@ describe("audit", () => {
       sourcePath: "config.toml",
       config: {
         command: "npx",
-        args: ["-y", "@upstash/context7-mcp"]
-      }
+        args: ["-y", "@upstash/context7-mcp"],
+      },
     });
 
     expect(issues.map((issue) => issue.path)).toContain("mcp_servers.context7.args");
+    expect(issues.find((issue) => issue.path === "mcp_servers.context7.args")?.code).toBe(
+      "MCP_UNPINNED_NPX",
+    );
     expect(issues.map((issue) => issue.path)).toContain("mcp_servers.context7.enabled_tools");
     expect(issues.every((issue) => issue.file === "config.toml")).toBe(true);
   });
@@ -39,22 +42,78 @@ describe("audit", () => {
   it("promotes shell command risk to an error in strict mode", () => {
     const issues = auditMcpServer(
       {
-      name: "shell",
-      sourcePath: "config.toml",
-      line: 1,
-      fieldLines: {
-        command: 2
+        name: "shell",
+        sourcePath: "config.toml",
+        line: 1,
+        fieldLines: {
+          command: 2,
+        },
+        config: {
+          command: "bash",
+          args: ["-lc", "node server.js"],
+        },
       },
-      config: {
-        command: "bash",
-        args: ["-lc", "node server.js"]
-        }
-      },
-      { strict: true }
+      { strict: true },
     );
 
     const commandIssue = issues.find((issue) => issue.path === "mcp_servers.shell.command");
     expect(commandIssue?.severity).toBe("error");
     expect(commandIssue?.line).toBe(2);
+  });
+
+  it("does not throw when a caller bypasses schema validation with an invalid URL", () => {
+    const issues = auditMcpServer({
+      name: "remote",
+      sourcePath: "config.toml",
+      config: {
+        url: "not a url",
+      } as never,
+    });
+
+    expect(issues.some((issue) => issue.code === "MCP_INVALID_REMOTE_URL")).toBe(true);
+  });
+
+  it("flags secret-like literals in MCP headers and bearer token fields", () => {
+    const issues = auditMcpServer({
+      name: "remote",
+      sourcePath: "config.toml",
+      config: {
+        url: "https://example.com/mcp",
+        enabled_tools: ["search"],
+        http_headers: {
+          Authorization: "Bearer abc1234567890SECRET",
+        },
+        bearer_token_env_var: "tok_1234567890abcdef",
+      } as never,
+    });
+
+    expect(issues.filter((issue) => issue.code === "MCP_SECRET_LITERAL")).toHaveLength(2);
+  });
+
+  it("applies MCP deny-list policy checks", () => {
+    const issues = auditMcpServer(
+      {
+        name: "blocked",
+        sourcePath: "config.toml",
+        config: {
+          command: "bash",
+          enabled_tools: ["run"],
+        },
+      },
+      {
+        policy: {
+          deniedMcpServers: ["blocked"],
+          deniedMcpCommands: ["bash"],
+          requirePinnedMcpPackages: false,
+          requireExplicitMcpToolPolicy: false,
+          requirePluginSkillPaths: false,
+          failOnWarnings: false,
+          suppressions: [],
+        },
+      },
+    );
+
+    expect(issues.map((issue) => issue.code)).toContain("MCP_SERVER_DENIED");
+    expect(issues.map((issue) => issue.code)).toContain("MCP_COMMAND_DENIED");
   });
 });

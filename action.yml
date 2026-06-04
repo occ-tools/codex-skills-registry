@@ -11,7 +11,7 @@ inputs:
     required: false
     default: .
   command:
-    description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, and schema.
+    description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, schema, pr-comment, and baseline.
     required: false
     default: doctor
   include-examples:
@@ -28,6 +28,10 @@ inputs:
     default: ""
   changed-files:
     description: Optional newline-delimited changed file list, relative to path, for PR-focused output.
+    required: false
+    default: ""
+  baseline:
+    description: Optional issue baseline JSON file, relative to path. Overrides policy baselineFile.
     required: false
     default: ""
   format:
@@ -56,6 +60,27 @@ outputs:
   report-path:
     description: Path to the exported Markdown report when command is report.
     value: ${{ steps.run.outputs.report-path }}
+  comment-path:
+    description: Path to the generated pull request comment when command is pr-comment.
+    value: ${{ steps.run.outputs.comment-path }}
+  baseline-path:
+    description: Path to the generated baseline file when command is baseline.
+    value: ${{ steps.run.outputs.baseline-path }}
+  issue-count:
+    description: Active issue count from JSON summary output.
+    value: ${{ steps.run.outputs.issue-count }}
+  error-count:
+    description: Active error count from JSON summary output.
+    value: ${{ steps.run.outputs.error-count }}
+  warning-count:
+    description: Active warning count from JSON summary output.
+    value: ${{ steps.run.outputs.warning-count }}
+  suppressed-count:
+    description: Suppressed issue count from JSON summary output.
+    value: ${{ steps.run.outputs.suppressed-count }}
+  baseline-count:
+    description: Baseline-filtered issue count from JSON summary output.
+    value: ${{ steps.run.outputs.baseline-count }}
 
 runs:
   using: composite
@@ -65,8 +90,12 @@ runs:
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
-        npm ci --ignore-scripts
-        npm run build
+        if [[ -f dist/cli.js ]]; then
+          npm ci --omit=dev --ignore-scripts
+        else
+          npm ci --ignore-scripts
+          npm run build
+        fi
 
     - name: Run codex-skills
       id: run
@@ -78,6 +107,7 @@ runs:
         REGISTRY_INPUT_CONFIG: ${{ inputs.config }}
         REGISTRY_INPUT_POLICY: ${{ inputs.policy }}
         REGISTRY_INPUT_CHANGED_FILES: ${{ inputs.changed-files }}
+        REGISTRY_INPUT_BASELINE: ${{ inputs.baseline }}
         REGISTRY_INPUT_FORMAT: ${{ inputs.format }}
         REGISTRY_INPUT_STRICT: ${{ inputs.strict }}
         REGISTRY_INPUT_SCHEMA: ${{ inputs.schema }}
@@ -90,26 +120,67 @@ runs:
           target_path="$GITHUB_WORKSPACE/$target_path"
         fi
 
-        args=(--cwd "$target_path")
+        base_args=(--cwd "$target_path")
         if [[ "$REGISTRY_INPUT_INCLUDE_EXAMPLES" != "true" ]]; then
-          args+=(--no-examples)
+          base_args+=(--no-examples)
         fi
         if [[ -n "$REGISTRY_INPUT_CONFIG" ]]; then
-          args+=(--config "$REGISTRY_INPUT_CONFIG")
+          base_args+=(--config "$REGISTRY_INPUT_CONFIG")
         fi
         if [[ -n "$REGISTRY_INPUT_POLICY" ]]; then
-          args+=(--policy "$REGISTRY_INPUT_POLICY")
+          base_args+=(--policy "$REGISTRY_INPUT_POLICY")
         fi
         if [[ -n "$REGISTRY_INPUT_CHANGED_FILES" ]]; then
-          args+=(--changed-files "$REGISTRY_INPUT_CHANGED_FILES")
+          base_args+=(--changed-files "$REGISTRY_INPUT_CHANGED_FILES")
         fi
-        args+=(--format "$REGISTRY_INPUT_FORMAT" --github-annotations)
+        if [[ -n "$REGISTRY_INPUT_BASELINE" ]]; then
+          base_args+=(--baseline "$REGISTRY_INPUT_BASELINE")
+        fi
+        args=("${base_args[@]}" --format "$REGISTRY_INPUT_FORMAT" --github-annotations)
+        summary_args=("${base_args[@]}" --format json)
 
         strict_args=()
         if [[ "$REGISTRY_INPUT_STRICT" == "true" ]]; then
           strict_args+=(--strict)
         fi
         sarif_file="$target_path/codex-skills-registry.sarif"
+        write_issue_outputs() {
+          local subcommand="$1"
+          shift
+          local summary_file="$target_path/codex-skills-registry-summary.json"
+          set +e
+          node dist/cli.js "${summary_args[@]}" "$subcommand" "$@" > "$summary_file"
+          local summary_status=$?
+          set -e
+          if [[ "$summary_status" -gt 1 || ! -s "$summary_file" ]]; then
+            return 0
+          fi
+
+          SUMMARY_FILE="$summary_file" node <<'NODE'
+        const fs = require("node:fs");
+        const data = JSON.parse(fs.readFileSync(process.env.SUMMARY_FILE, "utf8"));
+        const arrays = [
+          data.diagnostics,
+          data.validationIssues,
+          data.auditIssues,
+          data.issues,
+          Array.isArray(data.results) ? data.results.flatMap((result) => result.issues ?? []) : []
+        ].filter(Array.isArray);
+        const issues = arrays.flat();
+        const suppressed = data.suppressedIssues ?? [];
+        const baseline = data.baselineIssues ?? [];
+        const errors = issues.filter((issue) => issue.severity === "error").length;
+        const warnings = issues.filter((issue) => issue.severity === "warning").length;
+        fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+          `issue-count=${issues.length}`,
+          `error-count=${errors}`,
+          `warning-count=${warnings}`,
+          `suppressed-count=${suppressed.length}`,
+          `baseline-count=${baseline.length}`
+        ].join("\n") + "\n");
+        NODE
+        }
+
         run_sarif_or_text() {
           local subcommand="$1"
           shift
@@ -119,10 +190,16 @@ runs:
             local status=$?
             set -e
             echo "sarif-path=$sarif_file" >> "$GITHUB_OUTPUT"
+            write_issue_outputs "$subcommand" "$@"
             exit "$status"
           fi
 
+          set +e
           node dist/cli.js "${args[@]}" "$subcommand" "$@"
+          local status=$?
+          set -e
+          write_issue_outputs "$subcommand" "$@"
+          exit "$status"
         }
 
         case "$REGISTRY_INPUT_COMMAND" in
@@ -147,6 +224,17 @@ runs:
             out_file="$target_path/codex-skills-registry-report.md"
             node dist/cli.js "${args[@]}" report --out codex-skills-registry-report.md
             echo "report-path=$out_file" >> "$GITHUB_OUTPUT"
+            ;;
+          pr-comment)
+            out_file="$target_path/codex-skills-registry-pr-comment.md"
+            node dist/cli.js "${args[@]}" pr-comment --out codex-skills-registry-pr-comment.md --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif
+            echo "comment-path=$out_file" >> "$GITHUB_OUTPUT"
+            write_issue_outputs doctor "${strict_args[@]}"
+            ;;
+          baseline)
+            out_file="$target_path/codex-skills-baseline.json"
+            node dist/cli.js "${base_args[@]}" baseline --out codex-skills-baseline.json "${strict_args[@]}"
+            echo "baseline-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           schema)
             out_file="$target_path/codex-skills-registry.schema.json"

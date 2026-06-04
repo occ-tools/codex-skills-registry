@@ -1,4 +1,4 @@
-import { access, readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { ZodError } from "zod";
 import { parse as parseToml } from "smol-toml";
@@ -14,8 +14,9 @@ import {
   type TriggerType,
   type ValidationIssue,
   normalizeSkillInput,
-  zodErrorToIssues
+  zodErrorToIssues,
 } from "./schema.js";
+import { countChar, escapeRegExp, firstExistingPath, isSubpath, pathExists } from "./utils.js";
 
 export interface DiscoveryDiagnostic extends ValidationIssue {
   file?: string;
@@ -59,7 +60,7 @@ const EMPTY_RESULT: DiscoveryResult = {
   skills: [],
   mcpServers: [],
   plugins: [],
-  diagnostics: []
+  diagnostics: [],
 };
 
 /**
@@ -75,13 +76,13 @@ export async function discoverProject(options: DiscoverOptions = {}): Promise<Di
   const result = cloneEmptyResult();
 
   const skillRoots = options.skillRoots?.map((root) => path.resolve(cwd, root)) ?? [
-    ...(await findSkillRoots(cwd))
+    ...(await findSkillRoots(cwd)),
   ];
   const mcpConfigPaths = options.mcpConfigPaths?.map((file) => path.resolve(cwd, file)) ?? [
-    path.join(cwd, ".codex", "config.toml")
+    path.join(cwd, ".codex", "config.toml"),
   ];
   const pluginRoots = options.pluginRoots?.map((root) => path.resolve(cwd, root)) ?? [
-    path.join(cwd, "plugins")
+    path.join(cwd, "plugins"),
   ];
 
   if (options.includeExamples !== false) {
@@ -98,8 +99,8 @@ export async function discoverProject(options: DiscoverOptions = {}): Promise<Di
       await discoverSkillsFromRoot(
         root,
         root.includes(`${path.sep}examples${path.sep}`) ? "example" : "project",
-        disabledSkills
-      )
+        disabledSkills,
+      ),
     );
   }
 
@@ -152,7 +153,7 @@ export async function findSkillRoots(startDir: string): Promise<string[]> {
 export async function discoverSkillsFromRoot(
   root: string,
   source: CodexSkill["source"] = "project",
-  disabledSkills: Set<string> = new Set()
+  disabledSkills: Set<string> = new Set(),
 ): Promise<DiscoveryResult> {
   const result = cloneEmptyResult();
 
@@ -171,9 +172,11 @@ export async function discoverSkillsFromRoot(
     if (!(await pathExists(skillFile))) {
       result.diagnostics.push({
         severity: "warning",
+        code: "SKILL_FILE_MISSING",
         path: skillDir,
         file: skillDir,
-        message: "Skill directory is missing SKILL.md."
+        message: "Skill directory is missing SKILL.md.",
+        help: "Add SKILL.md or remove this directory from the skill root.",
       });
       continue;
     }
@@ -183,9 +186,11 @@ export async function discoverSkillsFromRoot(
       if (disabledSkills.has(discoveredSkill.name)) {
         result.diagnostics.push({
           severity: "warning",
+          code: "SKILL_DISABLED",
           path: discoveredSkill.name,
           file: discoveredSkill.skillFile,
-          message: "Skill is disabled by Codex skills.config."
+          message: "Skill is disabled by Codex skills.config.",
+          help: "Enable the skill in config.toml or remove it from the registry scope.",
         });
         continue;
       }
@@ -207,7 +212,7 @@ export async function discoverSkillsFromRoot(
  */
 export async function loadSkillFromDirectory(
   skillDir: string,
-  source: CodexSkill["source"] = "project"
+  source: CodexSkill["source"] = "project",
 ): Promise<DiscoveryResult> {
   const result = cloneEmptyResult();
   const skillFile = path.join(skillDir, "SKILL.md");
@@ -219,7 +224,7 @@ export async function loadSkillFromDirectory(
     sourceLines = collectYamlFrontmatterLines(markdown);
     const agentMetadata = await loadAgentMetadata(skillDir);
     const defaultTriggers = inferTriggers(
-      `${String(parsed.frontmatter.name ?? "")} ${String(parsed.frontmatter.description ?? "")}`
+      `${String(parsed.frontmatter.name ?? "")} ${String(parsed.frontmatter.description ?? "")}`,
     );
     const entryPoint = await detectEntryPoint(skillDir, parsed.frontmatter);
 
@@ -232,14 +237,17 @@ export async function loadSkillFromDirectory(
       metadata: {
         body: parsed.body,
         agent: agentMetadata,
-        sourceLines
-      }
+        sourceLines,
+      },
     });
 
     const validation = CodexSkillSchema.safeParse(normalized);
     if (!validation.success) {
       result.diagnostics.push(
-        ...zodErrorToIssues(validation.error, skillFile).map((issue) => ({ ...issue, file: skillFile }))
+        ...zodErrorToIssues(validation.error, skillFile).map((issue) => ({
+          ...issue,
+          file: skillFile,
+        })),
       );
       return result;
     }
@@ -251,17 +259,19 @@ export async function loadSkillFromDirectory(
         ...zodErrorToIssues(error, skillFile).map((issue) => ({
           ...issue,
           file: skillFile,
-          line: lineForIssuePath(issue.path, sourceLines)
-        }))
+          line: lineForIssuePath(issue.path, sourceLines),
+        })),
       );
       return result;
     }
 
     result.diagnostics.push({
       severity: "error",
+      code: "SKILL_MARKDOWN_INVALID",
       path: skillFile,
       file: skillFile,
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      help: "Fix SKILL.md frontmatter and markdown structure.",
     });
   }
 
@@ -283,12 +293,16 @@ export async function discoverMcpServersFromConfig(filePath: string): Promise<Di
 
   try {
     const content = await readFile(filePath, "utf8");
+    const lines = content.split(/\r?\n/);
     const parsed = parseToml(content);
     const validation = McpConfigFileSchema.safeParse(parsed);
 
     if (!validation.success) {
       result.diagnostics.push(
-        ...zodErrorToIssues(validation.error, filePath).map((issue) => ({ ...issue, file: filePath }))
+        ...zodErrorToIssues(validation.error, filePath).map((issue) => ({
+          ...issue,
+          file: filePath,
+        })),
       );
       return result;
     }
@@ -297,10 +311,12 @@ export async function discoverMcpServersFromConfig(filePath: string): Promise<Di
       const serverValidation = McpServerConfigSchema.safeParse(config);
       if (!serverValidation.success) {
         result.diagnostics.push(
-          ...zodErrorToIssues(serverValidation.error, `${filePath}.mcp_servers.${name}`).map((issue) => ({
-            ...issue,
-            file: filePath
-          }))
+          ...zodErrorToIssues(serverValidation.error, `${filePath}.mcp_servers.${name}`).map(
+            (issue) => ({
+              ...issue,
+              file: filePath,
+            }),
+          ),
         );
         continue;
       }
@@ -309,16 +325,18 @@ export async function discoverMcpServersFromConfig(filePath: string): Promise<Di
         name,
         config: serverValidation.data,
         sourcePath: filePath,
-        line: findTomlMcpServerLine(content, name),
-        fieldLines: findTomlMcpServerFieldLines(content, name)
+        line: findTomlMcpServerLine(lines, name),
+        fieldLines: findTomlMcpServerFieldLines(lines, name),
       });
     }
   } catch (error) {
     result.diagnostics.push({
       severity: "error",
+      code: "MCP_CONFIG_PARSE_FAILED",
       path: filePath,
       file: filePath,
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      help: "Fix the MCP config file syntax and schema.",
     });
   }
 
@@ -381,7 +399,7 @@ export async function discoverPluginsFromRoot(root: string): Promise<DiscoveryRe
 
     const candidates = [
       path.join(pluginDir, ".codex-plugin", "plugin.json"),
-      path.join(pluginDir, "plugin.json")
+      path.join(pluginDir, "plugin.json"),
     ];
     const manifestPath = await firstExistingPath(candidates);
     if (!manifestPath) {
@@ -394,22 +412,31 @@ export async function discoverPluginsFromRoot(root: string): Promise<DiscoveryRe
       const validation = PluginManifestSchema.safeParse(parsed);
       if (!validation.success) {
         result.diagnostics.push(
-          ...zodErrorToIssues(validation.error, manifestPath).map((issue) => ({ ...issue, file: manifestPath }))
+          ...zodErrorToIssues(validation.error, manifestPath).map((issue) => ({
+            ...issue,
+            file: manifestPath,
+          })),
         );
         continue;
       }
 
-      result.plugins.push({ manifest: validation.data, sourcePath: manifestPath, rootDir: pluginDir });
+      result.plugins.push({
+        manifest: validation.data,
+        sourcePath: manifestPath,
+        rootDir: pluginDir,
+      });
       mergeResult(
         result,
-        await discoverPluginMcpServers(pluginDir, validation.data, manifestPath, manifestContent)
+        await discoverPluginMcpServers(pluginDir, validation.data, manifestPath, manifestContent),
       );
     } catch (error) {
       result.diagnostics.push({
         severity: "error",
+        code: "PLUGIN_MANIFEST_PARSE_FAILED",
         path: manifestPath,
         file: manifestPath,
-        message: error instanceof Error ? error.message : String(error)
+        message: error instanceof Error ? error.message : String(error),
+        help: "Fix plugin.json so it is valid JSON and matches the plugin manifest schema.",
       });
     }
   }
@@ -429,9 +456,10 @@ export async function discoverPluginMcpServers(
   pluginDir: string,
   manifest: PluginManifest,
   manifestPath: string,
-  manifestContent?: string
+  manifestContent?: string,
 ): Promise<DiscoveryResult> {
   const result = cloneEmptyResult();
+  const manifestLines = manifestContent ? manifestContent.split(/\r?\n/) : undefined;
   const directServers =
     typeof manifest.mcpServers === "object" && !Array.isArray(manifest.mcpServers)
       ? manifest.mcpServers
@@ -441,10 +469,12 @@ export async function discoverPluginMcpServers(
     const validation = McpServerConfigSchema.safeParse(config);
     if (!validation.success) {
       result.diagnostics.push(
-        ...zodErrorToIssues(validation.error, `${manifestPath}.mcpServers.${name}`).map((issue) => ({
-          ...issue,
-          file: manifestPath
-        }))
+        ...zodErrorToIssues(validation.error, `${manifestPath}.mcpServers.${name}`).map(
+          (issue) => ({
+            ...issue,
+            file: manifestPath,
+          }),
+        ),
       );
       continue;
     }
@@ -453,8 +483,8 @@ export async function discoverPluginMcpServers(
       name,
       config: validation.data,
       sourcePath: manifestPath,
-      line: manifestContent ? findJsonPropertyLine(manifestContent, name) : undefined,
-      fieldLines: manifestContent ? findJsonNestedFieldLines(manifestContent, name) : undefined
+      line: manifestLines ? findJsonPropertyLine(manifestLines, name) : undefined,
+      fieldLines: manifestLines ? findJsonNestedFieldLines(manifestLines, name) : undefined,
     });
   }
 
@@ -466,9 +496,11 @@ export async function discoverPluginMcpServers(
   if (!isSubpath(pluginDir, mcpPath)) {
     result.diagnostics.push({
       severity: "error",
+      code: "PLUGIN_MCP_PATH_ESCAPE",
       path: `${manifestPath}.mcpServers`,
       file: manifestPath,
-      message: "Plugin mcpServers path must stay inside the plugin root."
+      message: "Plugin mcpServers path must stay inside the plugin root.",
+      help: "Use a plugin-local mcpServers path such as ./mcp.json.",
     });
     return result;
   }
@@ -476,21 +508,25 @@ export async function discoverPluginMcpServers(
   if (!(await pathExists(mcpPath))) {
     result.diagnostics.push({
       severity: "error",
+      code: "PLUGIN_MCP_PATH_MISSING",
       path: `${manifestPath}.mcpServers`,
       file: manifestPath,
-      message: `Plugin mcpServers file '${manifest.mcpServers}' does not exist.`
+      message: `Plugin mcpServers file '${manifest.mcpServers}' does not exist.`,
+      help: "Create the referenced MCP server file or update the manifest path.",
     });
     return result;
   }
 
   try {
     const mcpContent = await readFile(mcpPath, "utf8");
+    const mcpLines = mcpContent.split(/\r?\n/);
     const parsed = JSON.parse(mcpContent) as unknown;
     const parsedRecord =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
         : {};
-    const wrapped = "mcp_servers" in parsedRecord ? McpConfigFileSchema.safeParse(parsed) : undefined;
+    const wrapped =
+      "mcp_servers" in parsedRecord ? McpConfigFileSchema.safeParse(parsed) : undefined;
     const serverMap = wrapped?.success ? wrapped.data.mcp_servers : parsedRecord;
 
     for (const [name, config] of Object.entries(serverMap as Record<string, unknown>)) {
@@ -499,8 +535,8 @@ export async function discoverPluginMcpServers(
         result.diagnostics.push(
           ...zodErrorToIssues(validation.error, `${mcpPath}.${name}`).map((issue) => ({
             ...issue,
-            file: mcpPath
-          }))
+            file: mcpPath,
+          })),
         );
         continue;
       }
@@ -509,16 +545,18 @@ export async function discoverPluginMcpServers(
         name,
         config: validation.data,
         sourcePath: mcpPath,
-        line: findJsonPropertyLine(mcpContent, name),
-        fieldLines: findJsonNestedFieldLines(mcpContent, name)
+        line: findJsonPropertyLine(mcpLines, name),
+        fieldLines: findJsonNestedFieldLines(mcpLines, name),
       });
     }
   } catch (error) {
     result.diagnostics.push({
       severity: "error",
+      code: "PLUGIN_MCP_PARSE_FAILED",
       path: mcpPath,
       file: mcpPath,
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      help: "Fix the referenced MCP server JSON file.",
     });
   }
 
@@ -545,7 +583,7 @@ export function parseSkillMarkdown(markdown: string): ParsedSkillMarkdown {
 
   return {
     frontmatter: frontmatter as Record<string, unknown>,
-    body: match[2] ?? ""
+    body: match[2] ?? "",
   };
 }
 
@@ -554,7 +592,7 @@ function cloneEmptyResult(): DiscoveryResult {
     skills: [...EMPTY_RESULT.skills],
     mcpServers: [...EMPTY_RESULT.mcpServers],
     plugins: [...EMPTY_RESULT.plugins],
-    diagnostics: [...EMPTY_RESULT.diagnostics]
+    diagnostics: [...EMPTY_RESULT.diagnostics],
   };
 }
 
@@ -565,15 +603,6 @@ function mergeResult(target: DiscoveryResult, source: DiscoveryResult): void {
   target.diagnostics.push(...source.diagnostics);
 }
 
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function isDirectory(filePath: string): Promise<boolean> {
   try {
     return (await stat(filePath)).isDirectory();
@@ -582,23 +611,8 @@ async function isDirectory(filePath: string): Promise<boolean> {
   }
 }
 
-async function firstExistingPath(candidates: string[]): Promise<string | undefined> {
-  for (const candidate of candidates) {
-    if (await pathExists(candidate)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
 function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => path.normalize(value)))];
-}
-
-function isSubpath(root: string, candidate: string): boolean {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 async function loadAgentMetadata(skillDir: string): Promise<unknown> {
@@ -612,7 +626,7 @@ async function loadAgentMetadata(skillDir: string): Promise<unknown> {
 
 async function detectEntryPoint(
   skillDir: string,
-  frontmatter: Record<string, unknown>
+  frontmatter: Record<string, unknown>,
 ): Promise<string | undefined> {
   if (typeof frontmatter.entryPoint === "string") {
     return frontmatter.entryPoint;
@@ -624,7 +638,7 @@ async function detectEntryPoint(
     "scripts/main.ts",
     "scripts/main.js",
     "scripts/index.ts",
-    "scripts/index.js"
+    "scripts/index.js",
   ];
 
   for (const candidate of candidates) {
@@ -673,7 +687,7 @@ function extractSkillConfigEntries(input: unknown): Array<{ name?: unknown; enab
   const config = (skills as Record<string, unknown>).config;
   if (Array.isArray(config)) {
     return config.filter((entry): entry is { name?: unknown; enabled?: unknown } =>
-      Boolean(entry && typeof entry === "object" && !Array.isArray(entry))
+      Boolean(entry && typeof entry === "object" && !Array.isArray(entry)),
     );
   }
 
@@ -682,7 +696,7 @@ function extractSkillConfigEntries(input: unknown): Array<{ name?: unknown; enab
       .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value))
       .map(([name, value]) => ({
         name,
-        ...(value as Record<string, unknown>)
+        ...(value as Record<string, unknown>),
       }));
   }
 
@@ -712,22 +726,24 @@ function collectYamlFrontmatterLines(markdown: string): Record<string, number> {
   return sourceLines;
 }
 
-function lineForIssuePath(pathValue: string, sourceLines: Record<string, number>): number | undefined {
+function lineForIssuePath(
+  pathValue: string,
+  sourceLines: Record<string, number>,
+): number | undefined {
   const field = Object.keys(sourceLines).find((key) => pathValue.endsWith(`.${key}`));
   return field ? sourceLines[field] : undefined;
 }
 
-function findTomlMcpServerLine(content: string, name: string): number | undefined {
-  return findTomlMcpServerHeader(content, name)?.line;
+function findTomlMcpServerLine(lines: string[], name: string): number | undefined {
+  return findTomlMcpServerHeader(lines, name)?.line;
 }
 
-function findTomlMcpServerFieldLines(content: string, name: string): Record<string, number> {
-  const header = findTomlMcpServerHeader(content, name);
+function findTomlMcpServerFieldLines(lines: string[], name: string): Record<string, number> {
+  const header = findTomlMcpServerHeader(lines, name);
   if (!header) {
     return {};
   }
 
-  const lines = content.split(/\r?\n/);
   const fieldLines: Record<string, number> = {};
 
   for (let index = header.index + 1; index < lines.length; index += 1) {
@@ -746,29 +762,26 @@ function findTomlMcpServerFieldLines(content: string, name: string): Record<stri
 }
 
 function findTomlMcpServerHeader(
-  content: string,
-  name: string
+  lines: string[],
+  name: string,
 ): { index: number; line: number } | undefined {
   const escapedName = escapeRegExp(name);
   const headerPattern = new RegExp(
-    `^\\s*\\[\\s*mcp_servers\\.(?:"${escapedName}"|'${escapedName}'|${escapedName})\\s*\\]\\s*$`
+    `^\\s*\\[\\s*mcp_servers\\.(?:"${escapedName}"|'${escapedName}'|${escapedName})\\s*\\]\\s*$`,
   );
-
-  const lines = content.split(/\r?\n/);
   const index = lines.findIndex((line) => headerPattern.test(line));
   return index >= 0 ? { index, line: index + 1 } : undefined;
 }
 
-function findJsonPropertyLine(content: string, key: string): number | undefined {
+function findJsonPropertyLine(lines: string[], key: string): number | undefined {
   const propertyPattern = new RegExp(`"${escapeRegExp(key)}"\\s*:`);
-  const index = content.split(/\r?\n/).findIndex((line) => propertyPattern.test(line));
+  const index = lines.findIndex((line) => propertyPattern.test(line));
   return index >= 0 ? index + 1 : undefined;
 }
 
-function findJsonNestedFieldLines(content: string, objectKey: string): Record<string, number> {
-  const lines = content.split(/\r?\n/);
+function findJsonNestedFieldLines(lines: string[], objectKey: string): Record<string, number> {
   const startIndex = lines.findIndex((line) =>
-    new RegExp(`"${escapeRegExp(objectKey)}"\\s*:`).test(line)
+    new RegExp(`"${escapeRegExp(objectKey)}"\\s*:`).test(line),
   );
   const fieldLines: Record<string, number> = {};
 
@@ -793,12 +806,4 @@ function findJsonNestedFieldLines(content: string, objectKey: string): Record<st
   }
 
   return fieldLines;
-}
-
-function countChar(value: string, target: string): number {
-  return [...value].filter((char) => char === target).length;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

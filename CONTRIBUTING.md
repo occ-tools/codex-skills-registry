@@ -23,6 +23,9 @@ npm run dev -- doctor
 npm run dev -- audit
 npm run dev -- export --out registry-index.json
 npm run dev -- report --out codex-skills-report.md
+npm run dev -- pr-comment --out codex-skills-pr-comment.md
+npm run dev -- baseline --out codex-skills-baseline.json
+npm run dev -- explain MCP_UNPINNED_NPX
 npm run dev -- schema --out codex-skills-registry.schema.json
 npm run dev -- init-policy --preset recommended
 ```
@@ -58,5 +61,5 @@ npm run validate
 - `npm run release:check`
 - update `CHANGELOG.md` when one exists
 - confirm the npm package scope is correct for the publishing account
-- create a semver tag such as `v0.3.0`
+- create a semver tag such as `v0.4.0`
 - push the tag to trigger the release workflow, or publish manually with `npm publish --access public`

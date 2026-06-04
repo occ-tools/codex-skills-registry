@@ -31,6 +31,27 @@ describe("CLI", () => {
     expect(parsed.summary.auditIssues).toBe(0);
   });
 
+  it("prints project-relative issue paths in JSON doctor output", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "--format",
+      "json",
+      "doctor",
+      "--strict",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).not.toContain(process.cwd());
+    expect(output).toContain(".agents/skills/bad-skill/SKILL.md");
+    expect(process.exitCode).toBe(1);
+  });
+
   it("prints SARIF output for doctor", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -43,7 +64,7 @@ describe("CLI", () => {
       "--format",
       "sarif",
       "doctor",
-      "--strict"
+      "--strict",
     ]);
 
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -63,14 +84,14 @@ describe("CLI", () => {
     };
     expect(parsed.version).toBe("2.1.0");
     expect(parsed.runs[0]?.results.length).toBeGreaterThan(0);
-    expect(parsed.runs[0]?.results[0]?.locations?.[0]?.physicalLocation.artifactLocation.uri).not.toContain(
-      process.cwd()
-    );
+    expect(
+      parsed.runs[0]?.results[0]?.locations?.[0]?.physicalLocation.artifactLocation.uri,
+    ).not.toContain(process.cwd());
     const shellCommandResult = parsed.runs[0]?.results.find(
-      (result) => result.ruleId === "mcp_servers.shell.command"
+      (result) => result.ruleId === "MCP_SHELL_COMMAND",
     );
     expect(shellCommandResult?.locations?.[0]?.physicalLocation.artifactLocation.uri).toBe(
-      ".codex/config.toml"
+      ".codex/config.toml",
     );
     expect(shellCommandResult?.locations?.[0]?.physicalLocation.region.startLine).toBe(2);
     expect(process.exitCode).toBe(1);
@@ -95,7 +116,7 @@ describe("CLI", () => {
       "--cwd",
       "test/fixtures/invalid-project",
       "--no-examples",
-      "validate"
+      "validate",
     ]);
 
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -117,7 +138,7 @@ describe("CLI", () => {
       "test/fixtures/invalid-project",
       "--no-examples",
       "audit",
-      "--strict"
+      "--strict",
     ]);
 
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -132,7 +153,7 @@ describe("CLI", () => {
 
     try {
       await import("node:fs/promises").then((fs) =>
-        fs.writeFile(changedFilesPath, ".codex/config.toml\n", "utf8")
+        fs.writeFile(changedFilesPath, ".codex/config.toml\n", "utf8"),
       );
       await runCli([
         "node",
@@ -143,7 +164,7 @@ describe("CLI", () => {
         "--changed-files",
         "changed-files.txt",
         "doctor",
-        "--strict"
+        "--strict",
       ]);
 
       const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -167,13 +188,15 @@ describe("CLI", () => {
       "--no-examples",
       "--github-annotations",
       "doctor",
-      "--strict"
+      "--strict",
     ]);
 
     const output = error.mock.calls.map((call) => call.join(" ")).join("\n");
     expect(output).toContain("::error");
     expect(output).toContain("file=.codex/config.toml,line=2");
-    expect(output).toContain("title=.agents/skills/bad-skill/SKILL.md.name");
+    expect(output).toContain(
+      "title=SCHEMA_VALIDATION_FAILED .agents/skills/bad-skill/SKILL.md.name",
+    );
     expect(output).toContain("Shell-based MCP commands require careful review");
     expect(process.exitCode).toBe(1);
   });
@@ -211,7 +234,7 @@ describe("CLI", () => {
         "--no-examples",
         "export",
         "--out",
-        "registry-index.json"
+        "registry-index.json",
       ]);
 
       const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -238,6 +261,16 @@ describe("CLI", () => {
     expect(output).toContain("issue-triage");
   });
 
+  it("prints HTML registry reports", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli(["node", "codex-skills", "--cwd", process.cwd(), "report", "--html"]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("<!doctype html>");
+    expect(output).toContain("Codex Skills Registry Report");
+  });
+
   it("writes starter policy files", async () => {
     const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-policy-"));
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -252,7 +285,7 @@ describe("CLI", () => {
         "--preset",
         "strict-mcp",
         "--out",
-        ".codex-skills-registry.yaml"
+        ".codex-skills-registry.yaml",
       ]);
 
       const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
@@ -278,7 +311,83 @@ describe("CLI", () => {
 
   it("rejects conflicting schema command selectors", async () => {
     await expect(
-      runCli(["node", "codex-skills", "schema", "policy", "--schema", "mcp-server"])
+      runCli(["node", "codex-skills", "schema", "policy", "--schema", "mcp-server"]),
     ).rejects.toThrow("Use either the schema argument or --schema");
+  });
+
+  it("writes and applies finding baselines", async () => {
+    const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const baselinePath = path.join(fixtureRoot, "codex-skills-baseline.json");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        fixtureRoot,
+        "--no-examples",
+        "baseline",
+        "--strict",
+        "--out",
+        "codex-skills-baseline.json",
+      ]);
+
+      const baseline = JSON.parse(await readFile(baselinePath, "utf8")) as {
+        issues: Array<{ code: string; fingerprint: string }>;
+      };
+      expect(baseline.issues.some((issue) => issue.code === "MCP_SHELL_COMMAND")).toBe(true);
+
+      process.exitCode = undefined;
+      await runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        fixtureRoot,
+        "--no-examples",
+        "--baseline",
+        "codex-skills-baseline.json",
+        "doctor",
+        "--strict",
+      ]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(output).toContain("Baseline:");
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      await rm(baselinePath, { force: true });
+    }
+  });
+
+  it("prints pull request comments", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "pr-comment",
+      "--max-findings",
+      "2",
+      "--report-path",
+      "codex-skills-registry-report.md",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("## Codex Skills Registry");
+    expect(output).toContain("SCHEMA_VALIDATION_FAILED");
+    expect(output).toContain("Report: codex-skills-registry-report.md");
+  });
+
+  it("explains issue codes", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli(["node", "codex-skills", "explain", "MCP_UNPINNED_NPX"]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("MCP_UNPINNED_NPX");
+    expect(output).toContain("Remediation:");
   });
 });

@@ -1,0 +1,716 @@
+#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { access, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Command, Option } from "commander";
+import { loadIssueBaselineFile } from "./baseline.js";
+import { filterIssuesByChangedFiles, loadChangedFiles } from "./changed-files.js";
+import { emitGithubAnnotations } from "./cli-output.js";
+import { executeMockSkill } from "./executor.js";
+import { applyIssuePolicyFilters, createIssueBaseline, displayIssueFile, } from "./issues.js";
+import { createRegistryJsonSchema, createRegistryJsonSchemaCatalog, isRegistryJsonSchemaName, listRegistryJsonSchemaNames, } from "./json-schema.js";
+import { formatRegistryPolicyYaml, RegistryPolicyPresetSchema, } from "./policy.js";
+import { formatPullRequestComment } from "./pr-comment.js";
+import { createRegistryReport, formatRegistryReportHtml, formatRegistryReportMarkdown, } from "./report.js";
+import { SkillsRegistry, formatValidationIssues } from "./registry.js";
+import { explainRegistryRule, listRegistryRules } from "./rules.js";
+import { createSarifLog } from "./sarif.js";
+import { TriggerTypeSchema } from "./schema.js";
+const { version: VERSION } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const DEFAULT_OUTPUT_OPTIONS = {
+    format: "text",
+    githubAnnotations: false,
+};
+/**
+ * Runs the codex-skills CLI.
+ *
+ * @param argv - Process argv vector.
+ */
+export async function runCli(argv = process.argv) {
+    const program = new Command();
+    program
+        .name("codex-skills")
+        .description("Validate, index, and mock-run Codex Skills, plugins, and MCP configs.")
+        .version(VERSION)
+        .option("-C, --cwd <dir>", "project directory to inspect", process.cwd())
+        .option("--config <file>", "JSON/YAML file containing additional skill records")
+        .option("--policy <file>", "YAML/JSON registry policy file")
+        .option("--changed-files <file>", "newline-delimited changed file list for PR-focused output")
+        .option("--baseline <file>", "issue baseline JSON file; defaults to policy baselineFile")
+        .option("--no-examples", "exclude the examples/ skill roots under the project directory")
+        .option("--format <format>", "output format: text, json, or sarif", "text")
+        .option("--github-annotations", "emit GitHub Actions annotations for diagnostics")
+        .addOption(new Option("--list", "legacy flag: list registered skills").hideHelp())
+        .addOption(new Option("--validate", "legacy flag: validate a skill named by --name").hideHelp())
+        .addOption(new Option("--name <skillName>", "skill name for --validate").hideHelp())
+        .addOption(new Option("--run <skillName>", "legacy flag: mock-run a skill").hideHelp())
+        .action(async (options) => {
+        const loadOptions = toLoadOptions(options);
+        const outputOptions = toOutputOptions(options);
+        if (options.list) {
+            await handleList(loadOptions, outputOptions);
+            return;
+        }
+        if (options.validate) {
+            await handleValidate(String(options.name ?? ""), loadOptions, outputOptions);
+            return;
+        }
+        if (typeof options.run === "string") {
+            await handleRun(options.run, loadOptions, {}, outputOptions);
+            return;
+        }
+        program.outputHelp();
+    });
+    program
+        .command("list")
+        .description("list registered skills")
+        .action(async () => {
+        const parentOptions = program.opts();
+        await handleList(toLoadOptions(parentOptions), toOutputOptions(parentOptions));
+    });
+    program
+        .command("validate")
+        .description("validate one skill or every registered skill")
+        .argument("[name]", "skill name")
+        .option("--name <skillName>", "skill name")
+        .action(async (name, options, command) => {
+        const parentOptions = command.parent?.opts() ?? {};
+        await handleValidate(name ?? options.name ?? "", toLoadOptions(parentOptions), toOutputOptions(parentOptions));
+    });
+    program
+        .command("run")
+        .description("mock-run a registered skill")
+        .argument("<name>", "skill name")
+        .option("--trigger <type>", "mock trigger type")
+        .option("--repo <owner/name>", "mock repository", "example/repository")
+        .action(async (name, options, command) => {
+        const parentOptions = command.parent?.opts() ?? {};
+        const trigger = parseOptionalTrigger(options.trigger);
+        await handleRun(name, toLoadOptions(parentOptions), {
+            trigger,
+            repository: options.repo,
+        }, toOutputOptions(parentOptions));
+    });
+    program
+        .command("doctor")
+        .description("validate registry contents and summarize MCP/plugin discovery")
+        .option("--strict", "treat selected audit warnings as errors")
+        .action(async (options, command) => {
+        const parentOptions = command.parent?.opts() ?? {};
+        await handleDoctor(toLoadOptions(parentOptions), options, toOutputOptions(parentOptions));
+    });
+    program
+        .command("audit")
+        .description("run safety checks for registered skills and MCP servers")
+        .option("--strict", "treat selected audit warnings as errors")
+        .action(async (options, command) => {
+        const parentOptions = command.parent?.opts() ?? {};
+        await handleAudit(toLoadOptions(parentOptions), options, toOutputOptions(parentOptions));
+    });
+    program
+        .command("export")
+        .description("export registry index as JSON")
+        .option("-o, --out <file>", "output file; prints to stdout when omitted")
+        .action(async (options, command) => {
+        await handleExport(toLoadOptions(command.parent?.opts() ?? {}), options.out);
+    });
+    program
+        .command("report")
+        .description("generate a maintainer-facing registry report")
+        .option("-o, --out <file>", "output file; prints to stdout when omitted")
+        .option("--html", "write an HTML report instead of Markdown")
+        .action(async (options, command) => {
+        await handleReport(toLoadOptions(command.parent?.opts() ?? {}), options, toOutputOptions(command.parent?.opts() ?? {}));
+    });
+    program
+        .command("pr-comment")
+        .description("generate a pull-request comment summarizing active findings")
+        .option("-o, --out <file>", "output file; prints to stdout when omitted")
+        .option("--max-findings <count>", "maximum findings to include in the comment", "10")
+        .option("--report-path <path>", "report artifact path to include in the comment")
+        .option("--sarif-path <path>", "SARIF artifact path to include in the comment")
+        .action(async (options, command) => {
+        await handlePrComment(toLoadOptions(command.parent?.opts() ?? {}), options, toOutputOptions(command.parent?.opts() ?? {}));
+    });
+    program
+        .command("baseline")
+        .description("write a baseline file for the current active findings")
+        .option("-o, --out <file>", "output file", "codex-skills-baseline.json")
+        .option("--strict", "include strict audit findings in the baseline")
+        .action(async (options, command) => {
+        await handleBaseline(toLoadOptions(command.parent?.opts() ?? {}), options);
+    });
+    program
+        .command("explain")
+        .description("explain a registry issue code")
+        .argument("[code]", "issue code such as MCP_UNPINNED_NPX")
+        .action((code) => {
+        handleExplain(code, toOutputOptions(program.opts()));
+    });
+    program
+        .command("schema")
+        .description("export JSON Schema for supported registry files")
+        .argument("[schema]", `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`)
+        .option("-o, --out <file>", "output file; prints to stdout when omitted")
+        .option("--schema <schema>", `single schema to export: ${listRegistryJsonSchemaNames().join(", ")}`)
+        .action(async (schema, options, command) => {
+        if (schema && options.schema && schema !== options.schema) {
+            throw new Error("Use either the schema argument or --schema; both values must not differ.");
+        }
+        await handleSchema(toLoadOptions(command.parent?.opts() ?? {}), {
+            out: options.out,
+            schema: schema ?? options.schema,
+        });
+    });
+    program
+        .command("init-policy")
+        .description("write a starter .codex-skills-registry.yaml policy file")
+        .option("--preset <preset>", "policy preset: recommended, strict-mcp, or plugin-review", "recommended")
+        .option("-o, --out <file>", "output file; prints to stdout when omitted")
+        .option("--force", "overwrite an existing output file")
+        .action(async (options, command) => {
+        await handleInitPolicy(toLoadOptions(command.parent?.opts() ?? {}), options);
+    });
+    await program.parseAsync(argv);
+}
+async function handleList(options, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+    if (outputOptions.format === "json") {
+        writeJson({
+            skills: registry.listSkills(),
+            diagnostics: issuesForJson(diagnostics.activeIssues, options),
+            suppressedIssues: issuesForJson(diagnostics.suppressedIssues, options),
+            baselineIssues: issuesForJson(diagnostics.baselineIssues, options),
+        });
+        return;
+    }
+    rejectSarifFor("list", outputOptions);
+    console.log(registry.formatSkillsTable());
+}
+async function handleValidate(name, options, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    if (!name) {
+        const results = await registry.validateAllSkills();
+        const resultList = [...results.entries()].map(([skillName, result]) => ({
+            name: skillName,
+            ...result,
+        }));
+        const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+        const validationFilter = filterCliIssues(resultList.flatMap((result) => result.issues), options, registry, filterContext);
+        const issues = validationFilter.activeIssues;
+        const filteredResultList = resultList.map((result) => {
+            const resultIssues = filterCliIssues(result.issues, options, registry, filterContext).activeIssues;
+            return {
+                ...result,
+                valid: resultIssues.every((issue) => issue.severity !== "error"),
+                issues: resultIssues,
+            };
+        });
+        const allIssues = [
+            ...filterContext.baselineDiagnostics,
+            ...diagnostics.activeIssues,
+            ...issues,
+        ];
+        const hasErrors = allIssues.some((issue) => issue.severity === "error");
+        if (outputOptions.githubAnnotations) {
+            emitGithubAnnotations(allIssues, options.cwd);
+        }
+        if (outputOptions.format === "sarif") {
+            writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
+        }
+        else if (outputOptions.format === "json") {
+            writeJson({
+                diagnostics: issuesForJson([...filterContext.baselineDiagnostics, ...diagnostics.activeIssues], options),
+                results: filteredResultList.map((result) => ({
+                    ...result,
+                    issues: issuesForJson(result.issues, options),
+                })),
+                suppressedIssues: issuesForJson([...diagnostics.suppressedIssues, ...validationFilter.suppressedIssues], options),
+                baselineIssues: issuesForJson([...diagnostics.baselineIssues, ...validationFilter.baselineIssues], options),
+            });
+        }
+        else {
+            if (filterContext.baselineDiagnostics.length > 0) {
+                console.log("Diagnostics:");
+                console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
+            }
+            if (diagnostics.activeIssues.length > 0) {
+                console.log("Diagnostics:");
+                console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
+            }
+            if (resultList.length === 0 && diagnostics.activeIssues.length === 0) {
+                console.log("No registered skills to validate.");
+            }
+            for (const result of filteredResultList) {
+                console.log(`${result.name}: ${result.valid ? "valid" : "invalid"}`);
+                if (result.issues.length > 0) {
+                    console.log(formatValidationIssues(result.issues, { cwd: options.cwd }));
+                }
+            }
+        }
+        if (hasErrors) {
+            process.exitCode = 1;
+        }
+        return;
+    }
+    const result = await registry.validateSkillByName(name);
+    const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+    const resultFilter = filterCliIssues(result.issues, options, registry, filterContext);
+    const resultIssues = resultFilter.activeIssues;
+    const allIssues = [
+        ...filterContext.baselineDiagnostics,
+        ...diagnostics.activeIssues,
+        ...resultIssues,
+    ];
+    if (outputOptions.githubAnnotations) {
+        emitGithubAnnotations(allIssues, options.cwd);
+    }
+    if (outputOptions.format === "sarif") {
+        writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
+    }
+    else if (outputOptions.format === "json") {
+        writeJson({
+            name,
+            ...result,
+            valid: resultIssues.every((issue) => issue.severity !== "error"),
+            issues: issuesForJson(resultIssues, options),
+            diagnostics: issuesForJson([...filterContext.baselineDiagnostics, ...diagnostics.activeIssues], options),
+            suppressedIssues: issuesForJson([...diagnostics.suppressedIssues, ...resultFilter.suppressedIssues], options),
+            baselineIssues: issuesForJson([...diagnostics.baselineIssues, ...resultFilter.baselineIssues], options),
+        });
+    }
+    else {
+        if (filterContext.baselineDiagnostics.length > 0) {
+            console.log("Diagnostics:");
+            console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
+        }
+        if (diagnostics.activeIssues.length > 0) {
+            console.log("Diagnostics:");
+            console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
+        }
+        console.log(`${name}: ${resultIssues.every((issue) => issue.severity !== "error") ? "valid" : "invalid"}`);
+        console.log(formatValidationIssues(resultIssues, { cwd: options.cwd }));
+    }
+    if (shouldFail(allIssues, registry.getPolicy())) {
+        process.exitCode = 1;
+    }
+}
+async function handleRun(name, options, executionOptions = {}, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    const registry = await SkillsRegistry.load(options);
+    const result = await executeMockSkill(registry, name, executionOptions);
+    if (outputOptions.format === "json") {
+        writeJson(result);
+        return;
+    }
+    rejectSarifFor("run", outputOptions);
+    console.log(result.logs.join("\n"));
+}
+async function handleDoctor(options, doctorOptions = {}, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    const validationResults = await registry.validateAllSkills();
+    const rawValidationIssues = [...validationResults.entries()].flatMap(([skillName, result]) => result.issues.map((issue) => ({
+        ...issue,
+        path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`,
+    })));
+    const invalid = [...validationResults.values()].filter((result) => !result.valid);
+    const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+    const auditFilter = filterCliIssues(registry.audit({ strict: doctorOptions.strict }), options, registry, filterContext);
+    const validationFilter = filterCliIssues(rawValidationIssues, options, registry, filterContext);
+    const auditIssues = auditFilter.activeIssues;
+    const validationIssues = validationFilter.activeIssues;
+    const allIssues = [
+        ...filterContext.baselineDiagnostics,
+        ...diagnostics.activeIssues,
+        ...validationIssues,
+        ...auditIssues,
+    ];
+    const report = {
+        summary: {
+            skills: registry.listSkills().length,
+            invalidSkills: invalid.length,
+            mcpServers: registry.listMcpServers().length,
+            plugins: registry.listPlugins().length,
+            auditIssues: auditIssues.length,
+            suppressedIssues: diagnostics.suppressedIssues.length +
+                validationFilter.suppressedIssues.length +
+                auditFilter.suppressedIssues.length,
+            baselineIssues: diagnostics.baselineIssues.length +
+                validationFilter.baselineIssues.length +
+                auditFilter.baselineIssues.length,
+        },
+        policy: registry.getPolicy(),
+        policyPath: registry.getPolicyPath(),
+        diagnostics: [...filterContext.baselineDiagnostics, ...diagnostics.activeIssues],
+        validationIssues,
+        auditIssues,
+        suppressedIssues: [
+            ...diagnostics.suppressedIssues,
+            ...validationFilter.suppressedIssues,
+            ...auditFilter.suppressedIssues,
+        ],
+        baselineIssues: [
+            ...diagnostics.baselineIssues,
+            ...validationFilter.baselineIssues,
+            ...auditFilter.baselineIssues,
+        ],
+    };
+    if (outputOptions.githubAnnotations) {
+        emitGithubAnnotations(allIssues, options.cwd);
+    }
+    if (outputOptions.format === "sarif") {
+        writeJson(createSarifLog(allIssues, { cwd: options.cwd }));
+    }
+    else if (outputOptions.format === "json") {
+        writeJson({
+            ...report,
+            diagnostics: issuesForJson(report.diagnostics, options),
+            validationIssues: issuesForJson(report.validationIssues, options),
+            auditIssues: issuesForJson(report.auditIssues, options),
+            suppressedIssues: issuesForJson(report.suppressedIssues, options),
+            baselineIssues: issuesForJson(report.baselineIssues, options),
+        });
+    }
+    else {
+        console.log(`Skills: ${report.summary.skills} registered, ${report.summary.invalidSkills} invalid`);
+        console.log(`MCP servers: ${report.summary.mcpServers} discovered`);
+        console.log(`Plugins: ${report.summary.plugins} discovered`);
+        console.log(`Audit: ${report.summary.auditIssues} issue${report.summary.auditIssues === 1 ? "" : "s"} found`);
+        console.log(`Suppressed: ${report.summary.suppressedIssues}`);
+        console.log(`Baseline: ${report.summary.baselineIssues}`);
+        if (report.diagnostics.length > 0) {
+            console.log("\nDiagnostics:");
+            console.log(formatValidationIssues(report.diagnostics, { cwd: options.cwd }));
+        }
+        if (validationIssues.length > 0) {
+            console.log("\nValidation:");
+            console.log(formatValidationIssues(validationIssues, { cwd: options.cwd }));
+        }
+        if (auditIssues.length > 0) {
+            console.log("\nAudit:");
+            console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
+        }
+    }
+    if (shouldFail(allIssues, registry.getPolicy())) {
+        process.exitCode = 1;
+    }
+}
+async function handleAudit(options, auditOptions = {}, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    const diagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+    const auditFilter = filterCliIssues(registry.audit({ strict: auditOptions.strict }), options, registry, filterContext);
+    const auditIssues = auditFilter.activeIssues;
+    const issues = [
+        ...filterContext.baselineDiagnostics,
+        ...diagnostics.activeIssues,
+        ...auditIssues,
+    ];
+    if (outputOptions.githubAnnotations) {
+        emitGithubAnnotations(issues, options.cwd);
+    }
+    if (outputOptions.format === "sarif") {
+        writeJson(createSarifLog(issues, { cwd: options.cwd }));
+    }
+    else if (outputOptions.format === "json") {
+        writeJson({
+            diagnostics: issuesForJson([...filterContext.baselineDiagnostics, ...diagnostics.activeIssues], options),
+            issues: issuesForJson(auditIssues, options),
+            suppressedIssues: issuesForJson([...diagnostics.suppressedIssues, ...auditFilter.suppressedIssues], options),
+            baselineIssues: issuesForJson([...diagnostics.baselineIssues, ...auditFilter.baselineIssues], options),
+            policy: registry.getPolicy(),
+            policyPath: registry.getPolicyPath(),
+        });
+    }
+    else {
+        if (filterContext.baselineDiagnostics.length > 0) {
+            console.log("Diagnostics:");
+            console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
+        }
+        if (diagnostics.activeIssues.length > 0) {
+            console.log("Diagnostics:");
+            console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
+        }
+        if (auditIssues.length > 0) {
+            if (diagnostics.activeIssues.length > 0 || filterContext.baselineDiagnostics.length > 0) {
+                console.log("\nAudit:");
+            }
+            console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
+        }
+        else if (diagnostics.activeIssues.length === 0 &&
+            filterContext.baselineDiagnostics.length === 0) {
+            console.log(formatValidationIssues(auditIssues, { cwd: options.cwd }));
+        }
+    }
+    if (shouldFail(issues, registry.getPolicy())) {
+        process.exitCode = 1;
+    }
+}
+async function handleExport(options, outFile) {
+    const registry = await SkillsRegistry.load(options);
+    const json = `${JSON.stringify(registry.toIndex({ relativePaths: true }), null, 2)}\n`;
+    if (!outFile) {
+        console.log(json);
+        return;
+    }
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), outFile);
+    await writeFile(outputPath, json, "utf8");
+    console.log(`Exported registry index to ${outputPath}`);
+}
+async function handleReport(options, reportOptions, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    rejectSarifFor("report", outputOptions);
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    const index = registry.toIndex({ relativePaths: true });
+    const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
+    const report = createRegistryReport({
+        ...index,
+        diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
+    });
+    const output = outputOptions.format === "json"
+        ? `${JSON.stringify(report, null, 2)}\n`
+        : reportOptions.html
+            ? formatRegistryReportHtml(report)
+            : formatRegistryReportMarkdown(report);
+    if (!reportOptions.out) {
+        console.log(output);
+        return;
+    }
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), reportOptions.out);
+    await writeFile(outputPath, output, "utf8");
+    console.log(`Wrote registry report to ${outputPath}`);
+}
+async function handlePrComment(options, commentOptions, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    rejectSarifFor("pr-comment", outputOptions);
+    const registry = await SkillsRegistry.load(options);
+    const filterContext = await createCliIssueFilterContext(options, registry);
+    const index = registry.toIndex({ relativePaths: true });
+    const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
+    const report = createRegistryReport({
+        ...index,
+        diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
+    });
+    const output = outputOptions.format === "json"
+        ? `${JSON.stringify({
+            report,
+            suppressedIssues: filteredDiagnostics.suppressedIssues,
+            baselineIssues: filteredDiagnostics.baselineIssues,
+        }, null, 2)}\n`
+        : formatPullRequestComment(report, {
+            maxFindings: parsePositiveInt(commentOptions.maxFindings, "max-findings"),
+            suppressedCount: filteredDiagnostics.suppressedIssues.length,
+            baselineCount: filteredDiagnostics.baselineIssues.length,
+            reportPath: commentOptions.reportPath,
+            sarifPath: commentOptions.sarifPath,
+        });
+    if (!commentOptions.out) {
+        console.log(output);
+        return;
+    }
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), commentOptions.out);
+    await writeFile(outputPath, output, "utf8");
+    console.log(`Wrote pull request comment to ${outputPath}`);
+}
+async function handleBaseline(options, baselineOptions) {
+    const registry = await SkillsRegistry.load(options);
+    const validationResults = await registry.validateAllSkills();
+    const validationIssues = [...validationResults.entries()].flatMap(([skillName, result]) => result.issues.map((issue) => ({
+        ...issue,
+        path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`,
+    })));
+    const rawIssues = [
+        ...registry.listDiagnostics(),
+        ...validationIssues,
+        ...registry.audit({ strict: baselineOptions.strict }),
+    ];
+    const filterContext = {
+        changedFiles: await loadChangedFiles(options),
+        baselineDiagnostics: [],
+    };
+    const filtered = filterCliIssues(rawIssues, options, registry, filterContext);
+    const baseline = createIssueBaseline(filtered.activeIssues, { cwd: options.cwd });
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), baselineOptions.out);
+    await writeFile(outputPath, `${JSON.stringify(baseline, null, 2)}\n`, "utf8");
+    console.log(`Wrote ${baseline.issues.length} baseline finding(s) to ${outputPath}`);
+}
+async function handleSchema(options, schemaOptions) {
+    const schema = schemaOptions.schema
+        ? createNamedJsonSchema(schemaOptions.schema)
+        : createRegistryJsonSchemaCatalog();
+    const json = `${JSON.stringify(schema, null, 2)}\n`;
+    if (!schemaOptions.out) {
+        console.log(json);
+        return;
+    }
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), schemaOptions.out);
+    await writeFile(outputPath, json, "utf8");
+    console.log(`Exported JSON Schema to ${outputPath}`);
+}
+async function handleInitPolicy(options, policyOptions) {
+    const preset = parsePolicyPreset(policyOptions.preset);
+    const yaml = formatRegistryPolicyYaml({
+        extends: [preset],
+        failOnWarnings: preset === "strict-mcp",
+    });
+    if (!policyOptions.out) {
+        console.log(yaml);
+        return;
+    }
+    const outputPath = path.resolve(options.cwd ?? process.cwd(), policyOptions.out);
+    if (!policyOptions.force) {
+        try {
+            await access(outputPath);
+            throw new Error(`Policy file already exists at ${outputPath}. Use --force to overwrite.`);
+        }
+        catch (error) {
+            if (error instanceof Error && error.message.includes("already exists")) {
+                throw error;
+            }
+        }
+    }
+    await writeFile(outputPath, yaml, "utf8");
+    console.log(`Wrote registry policy to ${outputPath}`);
+}
+function handleExplain(code, outputOptions = DEFAULT_OUTPUT_OPTIONS) {
+    rejectSarifFor("explain", outputOptions);
+    if (!code) {
+        const rules = listRegistryRules();
+        if (outputOptions.format === "json") {
+            writeJson({ rules });
+            return;
+        }
+        console.log(rules.map((rule) => `${rule.code}: ${rule.title}`).join("\n"));
+        return;
+    }
+    const rule = explainRegistryRule(code);
+    if (!rule) {
+        throw new Error(`Unknown issue code '${code}'. Run codex-skills explain to list known codes.`);
+    }
+    if (outputOptions.format === "json") {
+        writeJson(rule);
+        return;
+    }
+    console.log(`${rule.code}: ${rule.title}`);
+    console.log(rule.description);
+    console.log(`Remediation: ${rule.remediation}`);
+}
+function createNamedJsonSchema(name) {
+    if (!isRegistryJsonSchemaName(name)) {
+        throw new Error(`Unknown schema '${name}'. Supported schemas are: ${listRegistryJsonSchemaNames().join(", ")}.`);
+    }
+    return createRegistryJsonSchema(name);
+}
+function parsePolicyPreset(value) {
+    return RegistryPolicyPresetSchema.parse(value);
+}
+function toLoadOptions(options) {
+    return {
+        cwd: typeof options.cwd === "string" ? options.cwd : process.cwd(),
+        configFile: typeof options.config === "string" ? options.config : undefined,
+        policyFile: typeof options.policy === "string" ? options.policy : undefined,
+        includeExamples: options.examples !== false,
+        changedFilesFile: typeof options.changedFiles === "string" ? options.changedFiles : undefined,
+        baselineFile: typeof options.baseline === "string" ? options.baseline : undefined,
+    };
+}
+function toOutputOptions(options) {
+    const format = typeof options.format === "string" ? options.format : "text";
+    if (format !== "text" && format !== "json" && format !== "sarif") {
+        throw new Error("Supported output formats are 'text', 'json', and 'sarif'.");
+    }
+    return {
+        format,
+        githubAnnotations: options.githubAnnotations === true,
+    };
+}
+function writeJson(value) {
+    console.log(JSON.stringify(value, null, 2));
+}
+function rejectSarifFor(command, outputOptions) {
+    if (outputOptions.format === "sarif") {
+        throw new Error(`SARIF output is not supported for '${command}'. Use doctor, audit, or validate.`);
+    }
+}
+function shouldFail(issues, policy) {
+    return (issues.some((issue) => issue.severity === "error") ||
+        (policy.failOnWarnings && issues.length > 0));
+}
+function issueForJson(issue, options) {
+    const file = displayIssueFile(issue, options.cwd);
+    const pathValue = issue.file && file
+        ? issue.path.replace(issue.file, file).replace(/\\/g, "/")
+        : issue.path.replace(/\\/g, "/");
+    return {
+        ...issue,
+        path: pathValue,
+        ...(file ? { file } : issue.file ? { file: issue.file.replace(/\\/g, "/") } : {}),
+    };
+}
+function issuesForJson(issues, options) {
+    return issues.map((issue) => issueForJson(issue, options));
+}
+async function createCliIssueFilterContext(options, registry) {
+    const changedFiles = await loadChangedFiles(options);
+    const baselineFile = options.baselineFile ?? registry.getPolicy().baselineFile;
+    if (!baselineFile) {
+        return {
+            changedFiles,
+            baselineDiagnostics: [],
+        };
+    }
+    try {
+        return {
+            changedFiles,
+            baseline: await loadIssueBaselineFile(options.cwd ?? process.cwd(), baselineFile),
+            baselineDiagnostics: [],
+        };
+    }
+    catch (error) {
+        return {
+            changedFiles,
+            baselineDiagnostics: [
+                {
+                    severity: "error",
+                    code: "BASELINE_LOAD_FAILED",
+                    path: baselineFile,
+                    file: baselineFile,
+                    message: error instanceof Error ? error.message : String(error),
+                    help: "Regenerate the baseline with codex-skills baseline or fix the baselineFile path.",
+                },
+            ],
+        };
+    }
+}
+function filterCliIssues(issues, options, registry, context) {
+    const changedFiltered = filterIssuesByChangedFiles(issues, options, context.changedFiles);
+    return applyIssuePolicyFilters(changedFiltered, {
+        policy: registry.getPolicy(),
+        cwd: options.cwd,
+        baseline: context.baseline,
+    });
+}
+function parsePositiveInt(value, label) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        throw new Error(`${label} must be a positive integer.`);
+    }
+    return parsed;
+}
+function parseOptionalTrigger(value) {
+    if (!value) {
+        return undefined;
+    }
+    return TriggerTypeSchema.parse(value);
+}
+const currentFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === currentFile) {
+    runCli().catch((error) => {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+    });
+}
+//# sourceMappingURL=cli.js.map

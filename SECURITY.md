@@ -25,7 +25,9 @@ Current behavior:
 
 - parse `SKILL.md` frontmatter
 - validate MCP server config shape
-- audit risky patterns such as shell-based MCP commands, broad tool exposure, and entry points that escape a skill directory
+- audit risky patterns such as shell-based MCP commands, broad tool exposure,
+  insecure remote MCP hosts, likely secret literals, and entry points that
+  escape a skill directory
 - mock-run skills without invoking arbitrary code
 - emit review findings through text, JSON, SARIF, and GitHub Actions annotations
 
@@ -36,7 +38,8 @@ Primary threats this project is designed to surface:
 - MCP servers that execute shell wrappers or unpinned packages
 - MCP servers that expose broad tool access without an explicit allow or deny list
 - remote MCP servers that use insecure transport or unapproved hosts
-- secrets embedded directly in MCP environment configuration
+- secrets embedded directly in MCP environment, HTTP header, or bearer token
+  configuration
 
 Current controls:
 
@@ -44,6 +47,10 @@ Current controls:
 - Plugin skill and MCP paths are checked against their containing root.
 - Project policy can require pinned MCP packages, approved MCP commands,
   approved remote hosts, explicit MCP tool policy, and plugin skill paths.
+- Project policy can deny specific skills, plugins, MCP servers, commands, and
+  remote MCP hosts.
+- Baseline files and expiring suppressions support incremental adoption without
+  hiding newly introduced findings.
 - Findings include source file and best-effort line hints for CI review.
 - Examples should use harmless local templates and must not include real
   credentials, tokens, private URLs, or production data.

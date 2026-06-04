@@ -58,3 +58,15 @@ jobs:
           path: .
           include-examples: "true"
           command: report
+      - name: Smoke PR comment action
+        uses: ./
+        with:
+          path: .
+          include-examples: "true"
+          command: pr-comment
+      - name: Smoke baseline action
+        uses: ./
+        with:
+          path: .
+          include-examples: "true"
+          command: baseline

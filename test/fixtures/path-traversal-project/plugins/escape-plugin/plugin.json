@@ -1,0 +1,11 @@
+{
+  "name": "escape-plugin",
+  "version": "0.1.0",
+  "description": "Plugin fixture with a skill path that escapes the plugin root.",
+  "skills": [
+    {
+      "name": "escape-skill",
+      "path": "../outside"
+    }
+  ]
+}

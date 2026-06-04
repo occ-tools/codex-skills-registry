@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRegistryJsonSchema,
   createRegistryJsonSchemaCatalog,
-  listRegistryJsonSchemaNames
+  listRegistryJsonSchemaNames,
 } from "../src/json-schema.js";
 
 describe("json schema export", () => {
@@ -26,9 +26,7 @@ describe("json schema export", () => {
     const skillFrontmatter = defs.SkillFrontmatter;
 
     expect(skillFrontmatter?.$id).toBeUndefined();
-    expect(JSON.stringify(skillFrontmatter)).toContain(
-      "#/$defs/SkillFrontmatter/$defs/__schema0"
-    );
+    expect(JSON.stringify(skillFrontmatter)).toContain("#/$defs/SkillFrontmatter/$defs/__schema0");
   });
 
   it("exports a named schema document", () => {
@@ -46,7 +44,7 @@ describe("json schema export", () => {
       "policy",
       "mcp-config",
       "mcp-server",
-      "plugin-manifest"
+      "plugin-manifest",
     ]);
   });
 });

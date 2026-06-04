@@ -27,11 +27,25 @@
 - first-party fixtures for common OSS workflow templates
 - plugin bundle compatibility checks against real-world example layouts
 - registry index publishing workflow
-- docs site generated from exported registry index
 - richer MCP policy checks and deny-list rules
 
-## v0.4+
+## v0.4
 
+- stable issue codes and remediation hints
+- issue baseline generation for incremental CI adoption
+- policy suppressions with owner, reason, and expiry
+- pull request comment generation
+- reusable Action issue-count outputs
+- Biome lint and format checks
+- stricter TypeScript compiler settings
+- committed dist assets for faster reusable Action startup
+
+## v0.5+
+
+- docs site generated from exported registry index
+- VS Code editing support for policy and registry files
+- HTML report export
+- larger performance fixtures for thousand-entry registries
 - optional trusted execution mode with sandboxing research
 
 ## Non-goals

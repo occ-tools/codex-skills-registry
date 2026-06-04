@@ -5,11 +5,10 @@ import {
   McpConfigFileSchema,
   McpServerConfigSchema,
   PluginManifestSchema,
-  SkillFrontmatterSchema
+  SkillFrontmatterSchema,
 } from "./schema.js";
 
-export const JSON_SCHEMA_BASE_ID =
-  "https://wangjiehu.github.io/codex-skills-registry/schemas";
+export const JSON_SCHEMA_BASE_ID = "https://wangjiehu.github.io/codex-skills-registry/schemas";
 
 interface JsonSchemaDefinition {
   name: string;
@@ -35,9 +34,9 @@ const JSON_SCHEMA_DEFINITIONS = [
         version: "0.1.0",
         triggers: ["issue"],
         entryPoint: "scripts/run.ts",
-        tags: ["maintainer", "triage"]
-      }
-    ]
+        tags: ["maintainer", "triage"],
+      },
+    ],
   },
   {
     name: "skill",
@@ -54,9 +53,9 @@ const JSON_SCHEMA_DEFINITIONS = [
         triggers: ["issue"],
         source: "project",
         tags: ["maintainer"],
-        metadata: {}
-      }
-    ]
+        metadata: {},
+      },
+    ],
   },
   {
     name: "policy",
@@ -68,16 +67,15 @@ const JSON_SCHEMA_DEFINITIONS = [
     examples: [
       {
         extends: ["recommended"],
-        failOnWarnings: false
-      }
-    ]
+        failOnWarnings: false,
+      },
+    ],
   },
   {
     name: "mcp-config",
     definitionName: "McpConfigFile",
     title: "Codex MCP Config File",
-    description:
-      "MCP server configuration file with a top-level mcp_servers object.",
+    description: "MCP server configuration file with a top-level mcp_servers object.",
     schema: McpConfigFileSchema,
     examples: [
       {
@@ -85,27 +83,26 @@ const JSON_SCHEMA_DEFINITIONS = [
           docs_search: {
             url: "https://example.com/mcp",
             bearer_token_env_var: "DOCS_MCP_TOKEN",
-            enabled_tools: ["search", "read"]
-          }
-        }
-      }
-    ]
+            enabled_tools: ["search", "read"],
+          },
+        },
+      },
+    ],
   },
   {
     name: "mcp-server",
     definitionName: "McpServerConfig",
     title: "Codex MCP Server",
-    description:
-      "Single stdio or HTTP MCP server definition accepted by codex-skills-registry.",
+    description: "Single stdio or HTTP MCP server definition accepted by codex-skills-registry.",
     schema: McpServerConfigSchema,
     examples: [
       {
         command: "node",
         args: ["./mcp/server.js"],
         enabled_tools: ["search", "read"],
-        default_tools_approval_mode: "prompt"
-      }
-    ]
+        default_tools_approval_mode: "prompt",
+      },
+    ],
   },
   {
     name: "plugin-manifest",
@@ -121,10 +118,10 @@ const JSON_SCHEMA_DEFINITIONS = [
         description: "Reusable Codex workflows for open-source maintainers.",
         skills: "./skills/",
         mcpServers: "./.mcp.json",
-        license: "MIT"
-      }
-    ]
-  }
+        license: "MIT",
+      },
+    ],
+  },
 ] as const satisfies readonly JsonSchemaDefinition[];
 
 export type RegistryJsonSchemaName = (typeof JSON_SCHEMA_DEFINITIONS)[number]["name"];
@@ -173,11 +170,11 @@ export function createRegistryJsonSchemaCatalog(): Record<string, unknown> {
   const defs = Object.fromEntries(
     JSON_SCHEMA_DEFINITIONS.map((definition) => [
       definition.definitionName,
-      toNestedDefinition(createJsonSchemaForDefinition(definition), definition.definitionName)
-    ])
+      toNestedDefinition(createJsonSchemaForDefinition(definition), definition.definitionName),
+    ]),
   );
   const refs = JSON_SCHEMA_DEFINITIONS.map((definition) => ({
-    $ref: `#/$defs/${definition.definitionName}`
+    $ref: `#/$defs/${definition.definitionName}`,
   }));
 
   return {
@@ -187,7 +184,7 @@ export function createRegistryJsonSchemaCatalog(): Record<string, unknown> {
     description:
       "JSON Schemas for Codex Skill frontmatter, normalized registry entries, registry policy files, plugin manifests, and MCP server configuration supported by codex-skills-registry.",
     anyOf: refs,
-    $defs: defs
+    $defs: defs,
   };
 }
 
@@ -198,8 +195,8 @@ function createJsonSchemaForDefinition(definition: JsonSchemaDefinition): Record
       io: "input",
       unrepresentable: "any",
       cycles: "ref",
-      reused: "ref"
-    })
+      reused: "ref",
+    }),
   ) as Record<string, unknown>;
 
   return {
@@ -207,13 +204,13 @@ function createJsonSchemaForDefinition(definition: JsonSchemaDefinition): Record
     $id: `${JSON_SCHEMA_BASE_ID}/${definition.name}.schema.json`,
     title: definition.title,
     description: definition.description,
-    examples: definition.examples
+    examples: definition.examples,
   };
 }
 
 function toNestedDefinition(
   schema: Record<string, unknown>,
-  definitionName: string
+  definitionName: string,
 ): Record<string, unknown> {
   const { $schema: _schema, $id: _id, ...nestedSchema } = schema;
   return rewriteLocalJsonSchemaRefs(nestedSchema, definitionName) as Record<string, unknown>;
@@ -230,8 +227,8 @@ function rewriteLocalJsonSchemaRefs(value: unknown, definitionName: string): unk
         key,
         key === "$ref" && typeof nestedValue === "string"
           ? rewriteLocalJsonSchemaRef(nestedValue, definitionName)
-          : rewriteLocalJsonSchemaRefs(nestedValue, definitionName)
-      ])
+          : rewriteLocalJsonSchemaRefs(nestedValue, definitionName),
+      ]),
     );
   }
 
@@ -253,7 +250,7 @@ function removeStandardMetadata(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([key]) => key !== "~standard")
-        .map(([key, nestedValue]) => [key, removeStandardMetadata(nestedValue)])
+        .map(([key, nestedValue]) => [key, removeStandardMetadata(nestedValue)]),
     );
   }
 

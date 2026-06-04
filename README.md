@@ -21,7 +21,8 @@ release notes, dependency review, and security-oriented automation.
 - CI-friendly validation for `SKILL.md` frontmatter, plugin paths, and project
   policy.
 - Safety audit rules for risky entry points, shell-based MCP servers, unpinned
-  packages, broad tool exposure, and potential secret literals.
+  packages, broad tool exposure, insecure remote MCP hosts, and potential
+  secret literals.
 - Safe mock execution for issue, pull request, release, dependency, security,
   and manual maintainer workflows.
 - JSON, SARIF, and GitHub Actions annotation output for automation and code
@@ -30,14 +31,16 @@ release notes, dependency review, and security-oriented automation.
   and MCP server definitions.
 - JSON Schema catalog export for editor validation and downstream CI checks.
 - Portable registry index export with project-relative paths.
-- Policy presets, starter policy generation, PR changed-file filtering, and
-  Markdown registry reports.
+- Stable issue codes, fix hints, policy allow/deny lists, suppressions, and
+  baseline filtering for incremental adoption.
+- Policy presets, starter policy generation, PR changed-file filtering,
+  Markdown/HTML registry reports, and pull request comment generation.
 - Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
   source repositories.
 
 ## Status
 
-Version 0.3 validates, indexes, audits, exports schemas for, reports on, and mock-runs
+Version 0.4 validates, indexes, audits, exports schemas for, reports on, and mock-runs
 workflow definitions. It does not execute arbitrary skill scripts.
 
 ## Why this exists
@@ -87,6 +90,8 @@ node dist/cli.js list
 node dist/cli.js validate issue-triage
 node dist/cli.js run issue-triage --trigger issue
 node dist/cli.js doctor
+node dist/cli.js pr-comment
+node dist/cli.js explain MCP_UNPINNED_NPX
 node dist/cli.js schema --out codex-skills-registry.schema.json
 ```
 
@@ -108,6 +113,10 @@ codex-skills doctor
 codex-skills audit
 codex-skills export --out registry-index.json
 codex-skills report --out codex-skills-report.md
+codex-skills report --html --out codex-skills-report.html
+codex-skills pr-comment --out codex-skills-pr-comment.md
+codex-skills baseline --out codex-skills-baseline.json
+codex-skills explain MCP_UNPINNED_NPX
 codex-skills schema --out codex-skills-registry.schema.json
 codex-skills schema policy --out codex-skills-policy.schema.json
 codex-skills init-policy --preset recommended --out .codex-skills-registry.yaml
@@ -129,9 +138,11 @@ src/schema.ts      Zod schemas for skills, MCP servers, and plugin manifests
 src/discovery.ts   Filesystem discovery for .agents/skills and .codex/config.toml
 src/registry.ts    In-memory registry, validation, and JSON export
 src/policy.ts      Project policy loading for .codex-skills-registry.yaml
+src/issues.ts      Stable issue codes, fingerprints, baselines, suppressions
 src/audit.ts       Safety checks for review-worthy MCP and skill risks
 src/sarif.ts       SARIF conversion for Code Scanning integrations
 src/json-schema.ts JSON Schema export for editor and CI integrations
+src/pr-comment.ts  Pull request comment formatting
 src/executor.ts    Safe mock executor
 src/cli.ts         Commander-based CLI
 examples/          Example maintainer workflows and MCP config
@@ -191,7 +202,8 @@ The audit command highlights patterns that deserve maintainer review:
 - unpinned `npx` MCP packages
 - MCP servers without explicit tool allow or deny lists
 - broad tool approval policies
-- potential secret literals in MCP environment values
+- potential secret literals in MCP environment values, HTTP headers, and bearer
+  token configuration
 
 ## What it does not do
 
@@ -213,11 +225,24 @@ allowedMcpCommands:
   - node
   - python
   - uvx
+deniedMcpCommands:
+  - bash
+allowedMcpServers:
+  - context7
+deniedPlugins:
+  - experimental-plugin
 allowedRemoteMcpHosts:
   - example.com
 requireExplicitMcpToolPolicy: true
 requirePluginSkillPaths: true
 failOnWarnings: false
+baselineFile: codex-skills-baseline.json
+suppressions:
+  - code: MCP_REMOTE_NOT_HTTPS
+    file: .codex/config.toml
+    reason: Local-only fixture reviewed by maintainers
+    owner: security
+    expiresOn: 2099-01-01
 ```
 
 Policy is intentionally small. It should catch review-worthy risks
@@ -230,6 +255,21 @@ codex-skills init-policy --preset recommended --out .codex-skills-registry.yaml
 ```
 
 Supported presets are `recommended`, `strict-mcp`, and `plugin-review`.
+
+Use `baseline` when a repository already has known findings and you only want
+CI to block newly introduced risks:
+
+```bash
+codex-skills baseline --strict --out codex-skills-baseline.json
+codex-skills doctor --strict --baseline codex-skills-baseline.json
+```
+
+Every finding has a stable issue code and a deterministic fingerprint. Use
+`explain` to inspect the intent and remediation for common rules:
+
+```bash
+codex-skills explain MCP_UNPINNED_NPX
+```
 
 ## JSON Schema export
 
@@ -283,7 +323,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.3.0
+      - uses: wangjiehu/codex-skills-registry@v0.4.0
         with:
           path: .
           command: doctor
@@ -308,7 +348,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.3.0
+      - uses: wangjiehu/codex-skills-registry@v0.4.0
         with:
           path: .
           command: doctor
@@ -318,14 +358,21 @@ jobs:
 ```
 
 Supported action commands are `doctor`, `validate`, `list`, `audit`, `export`,
-`report`, and `schema`. The action emits GitHub annotations for diagnostics, validation
-issues, and audit findings.
+`report`, `schema`, `pr-comment`, and `baseline`. The action emits GitHub
+annotations for diagnostics, validation issues, and audit findings.
+
+Action outputs include artifact paths plus active issue counts:
+
+- `index-path`, `sarif-path`, `schema-path`, `report-path`, `comment-path`,
+  `baseline-path`
+- `issue-count`, `error-count`, `warning-count`, `suppressed-count`,
+  `baseline-count`
 
 To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.3.0
+  uses: wangjiehu/codex-skills-registry@v0.4.0
   with:
     path: .
     command: schema
@@ -336,7 +383,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.3.0
+  uses: wangjiehu/codex-skills-registry@v0.4.0
   continue-on-error: true
   with:
     path: .
@@ -365,6 +412,21 @@ To create a Markdown summary for a CI artifact or repository documentation:
 
 ```bash
 codex-skills report --out codex-skills-report.md
+```
+
+For a static HTML artifact:
+
+```bash
+codex-skills report --html --out codex-skills-report.html
+```
+
+To create a pull request comment body that another workflow step can post:
+
+```bash
+codex-skills pr-comment \
+  --out codex-skills-pr-comment.md \
+  --report-path codex-skills-registry-report.md \
+  --sarif-path codex-skills-registry.sarif
 ```
 
 The repository also includes a `registry-artifacts` workflow that exports the
@@ -401,11 +463,13 @@ const result = await executeMockSkill(registry, "issue-triage", {
 
 ```bash
 npm run validate
+npm run lint
+npm run format:check
 npm run pack:check
 ```
 
-The GitHub Actions workflow runs install, build, test, CLI smoke tests, and a
-smoke test of the reusable action.
+The GitHub Actions workflow runs lint, format checks, build, test, CLI smoke
+tests, and smoke tests of the reusable action.
 
 ## Release
 
@@ -429,7 +493,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.3.0` is pushed.
+Automated releases run when a semver tag such as `v0.4.0` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

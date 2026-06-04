@@ -1,8 +1,9 @@
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { zodErrorToIssues, type ValidationIssue } from "./schema.js";
+import { firstExistingPath } from "./utils.js";
 
 export const RegistryPolicyPresetSchema = z.enum(["recommended", "strict-mcp", "plugin-review"]);
 export type RegistryPolicyPreset = z.infer<typeof RegistryPolicyPresetSchema>;
@@ -10,6 +11,23 @@ export type RegistryPolicyPreset = z.infer<typeof RegistryPolicyPresetSchema>;
 const PolicyExtendsSchema = z
   .union([RegistryPolicyPresetSchema, z.array(RegistryPolicyPresetSchema).min(1)])
   .optional();
+
+const SuppressionSchema = z
+  .object({
+    code: z.string().min(1).optional(),
+    path: z.string().min(1).optional(),
+    file: z.string().min(1).optional(),
+    reason: z.string().min(8),
+    owner: z.string().min(1).optional(),
+    expiresOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict()
+  .refine((value) => Boolean(value.code || value.path || value.file), {
+    message: "Suppression requires at least one of code, path, or file.",
+  });
 
 /**
  * Repository policy file for maintainers who want stricter or project-specific
@@ -19,11 +37,21 @@ export const RegistryPolicyInputSchema = z
   .object({
     extends: PolicyExtendsSchema,
     requirePinnedMcpPackages: z.boolean().optional(),
+    allowedSkills: z.array(z.string().min(1)).optional(),
+    deniedSkills: z.array(z.string().min(1)).optional(),
+    allowedPlugins: z.array(z.string().min(1)).optional(),
+    deniedPlugins: z.array(z.string().min(1)).optional(),
+    allowedMcpServers: z.array(z.string().min(1)).optional(),
+    deniedMcpServers: z.array(z.string().min(1)).optional(),
     allowedMcpCommands: z.array(z.string().min(1)).optional(),
+    deniedMcpCommands: z.array(z.string().min(1)).optional(),
     allowedRemoteMcpHosts: z.array(z.string().min(1)).optional(),
+    deniedRemoteMcpHosts: z.array(z.string().min(1)).optional(),
     requireExplicitMcpToolPolicy: z.boolean().optional(),
     requirePluginSkillPaths: z.boolean().optional(),
-    failOnWarnings: z.boolean().optional()
+    failOnWarnings: z.boolean().optional(),
+    baselineFile: z.string().min(1).optional(),
+    suppressions: z.array(SuppressionSchema).optional(),
   })
   .strict();
 
@@ -32,7 +60,8 @@ export const RegistryPolicySchema = RegistryPolicyInputSchema.omit({ extends: tr
     requirePinnedMcpPackages: z.boolean().default(false),
     requireExplicitMcpToolPolicy: z.boolean().default(false),
     requirePluginSkillPaths: z.boolean().default(false),
-    failOnWarnings: z.boolean().default(false)
+    failOnWarnings: z.boolean().default(false),
+    suppressions: z.array(SuppressionSchema).default([]),
   })
   .strict();
 
@@ -52,25 +81,25 @@ export const REGISTRY_POLICY_PRESETS: Record<RegistryPolicyPreset, RegistryPolic
     requirePinnedMcpPackages: true,
     requireExplicitMcpToolPolicy: true,
     requirePluginSkillPaths: true,
-    failOnWarnings: false
+    failOnWarnings: false,
   },
   "strict-mcp": {
     requirePinnedMcpPackages: true,
     allowedMcpCommands: ["node", "python", "uvx"],
     requireExplicitMcpToolPolicy: true,
-    failOnWarnings: true
+    failOnWarnings: true,
   },
   "plugin-review": {
     requirePluginSkillPaths: true,
     requireExplicitMcpToolPolicy: true,
-    failOnWarnings: false
-  }
+    failOnWarnings: false,
+  },
 };
 
 const POLICY_FILENAMES = [
   ".codex-skills-registry.yaml",
   ".codex-skills-registry.yml",
-  ".codex-skills-registry.json"
+  ".codex-skills-registry.json",
 ];
 
 /**
@@ -81,10 +110,7 @@ const POLICY_FILENAMES = [
  * @param policyFile - Optional explicit policy file path.
  * @returns Loaded policy and validation diagnostics.
  */
-export async function loadRegistryPolicy(
-  cwd: string,
-  policyFile?: string
-): Promise<LoadedPolicy> {
+export async function loadRegistryPolicy(cwd: string, policyFile?: string): Promise<LoadedPolicy> {
   const candidates = policyFile
     ? [path.resolve(cwd, policyFile)]
     : POLICY_FILENAMES.map((filename) => path.join(cwd, filename));
@@ -100,15 +126,15 @@ export async function loadRegistryPolicy(
           {
             severity: "error",
             path: resolvedPath,
-            message: "Policy file does not exist."
-          }
-        ]
+            message: "Policy file does not exist.",
+          },
+        ],
       };
     }
 
     return {
       policy: DEFAULT_POLICY,
-      diagnostics: []
+      diagnostics: [],
     };
   }
 
@@ -123,14 +149,14 @@ export async function loadRegistryPolicy(
       return {
         policy: DEFAULT_POLICY,
         sourcePath,
-        diagnostics: zodErrorToIssues(validation.error, sourcePath)
+        diagnostics: zodErrorToIssues(validation.error, sourcePath),
       };
     }
 
     return {
       policy: resolveRegistryPolicy(validation.data),
       sourcePath,
-      diagnostics: []
+      diagnostics: [],
     };
   } catch (error) {
     return {
@@ -140,27 +166,24 @@ export async function loadRegistryPolicy(
         {
           severity: "error",
           path: sourcePath,
-          message: error instanceof Error ? error.message : String(error)
-        }
-      ]
+          message: error instanceof Error ? error.message : String(error),
+        },
+      ],
     };
   }
 }
 
 export function resolveRegistryPolicy(input: RegistryPolicyInput = {}): RegistryPolicy {
   const presetNames = normalizePolicyExtends(input.extends);
-  const presetPolicy = presetNames.reduce<RegistryPolicyInput>(
-    (merged, presetName) => ({
-      ...merged,
-      ...REGISTRY_POLICY_PRESETS[presetName]
-    }),
-    {}
-  );
+  const presetPolicy: RegistryPolicyInput = {};
+  for (const presetName of presetNames) {
+    Object.assign(presetPolicy, REGISTRY_POLICY_PRESETS[presetName]);
+  }
   const { extends: _extends, ...overrides } = input;
 
   return RegistryPolicySchema.parse({
     ...presetPolicy,
-    ...removeUndefinedValues(overrides)
+    ...removeUndefinedValues(overrides),
   });
 }
 
@@ -176,11 +199,38 @@ export function formatRegistryPolicyYaml(policy: RegistryPolicyInput): string {
   }
 
   appendBooleanPolicyLine(lines, "requirePinnedMcpPackages", policy.requirePinnedMcpPackages);
+  appendStringListPolicyLines(lines, "allowedSkills", policy.allowedSkills);
+  appendStringListPolicyLines(lines, "deniedSkills", policy.deniedSkills);
+  appendStringListPolicyLines(lines, "allowedPlugins", policy.allowedPlugins);
+  appendStringListPolicyLines(lines, "deniedPlugins", policy.deniedPlugins);
+  appendStringListPolicyLines(lines, "allowedMcpServers", policy.allowedMcpServers);
+  appendStringListPolicyLines(lines, "deniedMcpServers", policy.deniedMcpServers);
   appendStringListPolicyLines(lines, "allowedMcpCommands", policy.allowedMcpCommands);
+  appendStringListPolicyLines(lines, "deniedMcpCommands", policy.deniedMcpCommands);
   appendStringListPolicyLines(lines, "allowedRemoteMcpHosts", policy.allowedRemoteMcpHosts);
-  appendBooleanPolicyLine(lines, "requireExplicitMcpToolPolicy", policy.requireExplicitMcpToolPolicy);
+  appendStringListPolicyLines(lines, "deniedRemoteMcpHosts", policy.deniedRemoteMcpHosts);
+  appendBooleanPolicyLine(
+    lines,
+    "requireExplicitMcpToolPolicy",
+    policy.requireExplicitMcpToolPolicy,
+  );
   appendBooleanPolicyLine(lines, "requirePluginSkillPaths", policy.requirePluginSkillPaths);
   appendBooleanPolicyLine(lines, "failOnWarnings", policy.failOnWarnings);
+  if (policy.baselineFile) {
+    lines.push(`baselineFile: ${policy.baselineFile}`);
+  }
+  if (policy.suppressions && policy.suppressions.length > 0) {
+    lines.push("suppressions:");
+    for (const suppression of policy.suppressions) {
+      lines.push("  -");
+      appendOptionalNestedLine(lines, "code", suppression.code);
+      appendOptionalNestedLine(lines, "path", suppression.path);
+      appendOptionalNestedLine(lines, "file", suppression.file);
+      appendOptionalNestedLine(lines, "reason", suppression.reason);
+      appendOptionalNestedLine(lines, "owner", suppression.owner);
+      appendOptionalNestedLine(lines, "expiresOn", suppression.expiresOn);
+    }
+  }
 
   return `${lines.join("\n")}\n`;
 }
@@ -194,7 +244,9 @@ function normalizePolicyExtends(value: RegistryPolicyInput["extends"]): Registry
 }
 
 function removeUndefinedValues<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined)) as Partial<T>;
+  return Object.fromEntries(
+    Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined),
+  ) as Partial<T>;
 }
 
 function appendBooleanPolicyLine(lines: string[], key: string, value: boolean | undefined): void {
@@ -206,7 +258,7 @@ function appendBooleanPolicyLine(lines: string[], key: string, value: boolean | 
 function appendStringListPolicyLines(
   lines: string[],
   key: string,
-  value: string[] | undefined
+  value: string[] | undefined,
 ): void {
   if (!value) {
     return;
@@ -218,15 +270,8 @@ function appendStringListPolicyLines(
   }
 }
 
-async function firstExistingPath(candidates: string[]): Promise<string | undefined> {
-  for (const candidate of candidates) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // Keep looking.
-    }
+function appendOptionalNestedLine(lines: string[], key: string, value: string | undefined): void {
+  if (value) {
+    lines.push(`    ${key}: ${JSON.stringify(value)}`);
   }
-
-  return undefined;
 }

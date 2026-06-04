@@ -1,6 +1,6 @@
 {
   "name": "@wangjiehu/codex-skills-registry",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Validate, index, and test Codex Skills, plugin manifests, and MCP server configs for open-source maintainer workflows.",
   "type": "module",
   "license": "MIT",
@@ -63,12 +63,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
     "test": "vitest run",
     "prepack": "npm run build",
     "prepublishOnly": "npm run release:check",
     "pack:check": "npm pack --dry-run",
     "release:check": "npm run validate && npm run pack:check",
-    "validate": "npm run build && npm test"
+    "validate": "npm run lint && npm run format:check && npm run build && npm test"
   },
   "dependencies": {
     "commander": "^14.0.2",
@@ -77,6 +80,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@types/node": "^24.10.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

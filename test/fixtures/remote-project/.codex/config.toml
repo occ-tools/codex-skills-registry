@@ -1,0 +1,3 @@
+[mcp_servers.remote_docs]
+url = "http://example.com/mcp"
+enabled_tools = ["search"]

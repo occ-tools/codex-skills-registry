@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0
+
+- Add stable issue codes, fix hints, and SARIF rule IDs for policy/audit findings.
+- Add policy allow/deny lists for skills, plugins, MCP servers, MCP commands, and remote MCP hosts.
+- Add policy suppressions with reason, owner, and expiry fields.
+- Add issue baseline generation and filtering through `baseline`, `--baseline`, and policy `baselineFile`.
+- Add pull request comment generation through `pr-comment` and reusable Action `command: pr-comment`.
+- Add static HTML registry reports through `report --html`.
+- Add `explain` for common issue codes and remediations.
+- Add reusable Action outputs for active issue, error, warning, suppression, and baseline counts.
+- Harden MCP URL handling and detect likely secret literals in headers and bearer token fields.
+- Add Biome lint/format checks and stricter TypeScript compiler options.
+- Add fixtures and tests for executor behavior, baselines, suppressions, remote MCP, plugin-only projects, external plugin MCP JSON, and path traversal.
+- Allow the reusable Action to use committed `dist` assets with production dependencies.
+
 ## 0.3.0
 
 - Add policy presets and an `init-policy` command.

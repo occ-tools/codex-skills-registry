@@ -1,0 +1,232 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { parse as parseYaml } from "yaml";
+import { z } from "zod";
+import { zodErrorToIssues } from "./schema.js";
+import { firstExistingPath } from "./utils.js";
+export const RegistryPolicyPresetSchema = z.enum(["recommended", "strict-mcp", "plugin-review"]);
+const PolicyExtendsSchema = z
+    .union([RegistryPolicyPresetSchema, z.array(RegistryPolicyPresetSchema).min(1)])
+    .optional();
+const SuppressionSchema = z
+    .object({
+    code: z.string().min(1).optional(),
+    path: z.string().min(1).optional(),
+    file: z.string().min(1).optional(),
+    reason: z.string().min(8),
+    owner: z.string().min(1).optional(),
+    expiresOn: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+})
+    .strict()
+    .refine((value) => Boolean(value.code || value.path || value.file), {
+    message: "Suppression requires at least one of code, path, or file.",
+});
+/**
+ * Repository policy file for maintainers who want stricter or project-specific
+ * registry behavior in CI.
+ */
+export const RegistryPolicyInputSchema = z
+    .object({
+    extends: PolicyExtendsSchema,
+    requirePinnedMcpPackages: z.boolean().optional(),
+    allowedSkills: z.array(z.string().min(1)).optional(),
+    deniedSkills: z.array(z.string().min(1)).optional(),
+    allowedPlugins: z.array(z.string().min(1)).optional(),
+    deniedPlugins: z.array(z.string().min(1)).optional(),
+    allowedMcpServers: z.array(z.string().min(1)).optional(),
+    deniedMcpServers: z.array(z.string().min(1)).optional(),
+    allowedMcpCommands: z.array(z.string().min(1)).optional(),
+    deniedMcpCommands: z.array(z.string().min(1)).optional(),
+    allowedRemoteMcpHosts: z.array(z.string().min(1)).optional(),
+    deniedRemoteMcpHosts: z.array(z.string().min(1)).optional(),
+    requireExplicitMcpToolPolicy: z.boolean().optional(),
+    requirePluginSkillPaths: z.boolean().optional(),
+    failOnWarnings: z.boolean().optional(),
+    baselineFile: z.string().min(1).optional(),
+    suppressions: z.array(SuppressionSchema).optional(),
+})
+    .strict();
+export const RegistryPolicySchema = RegistryPolicyInputSchema.omit({ extends: true })
+    .extend({
+    requirePinnedMcpPackages: z.boolean().default(false),
+    requireExplicitMcpToolPolicy: z.boolean().default(false),
+    requirePluginSkillPaths: z.boolean().default(false),
+    failOnWarnings: z.boolean().default(false),
+    suppressions: z.array(SuppressionSchema).default([]),
+})
+    .strict();
+export const DEFAULT_POLICY = RegistryPolicySchema.parse({});
+export const REGISTRY_POLICY_PRESETS = {
+    recommended: {
+        requirePinnedMcpPackages: true,
+        requireExplicitMcpToolPolicy: true,
+        requirePluginSkillPaths: true,
+        failOnWarnings: false,
+    },
+    "strict-mcp": {
+        requirePinnedMcpPackages: true,
+        allowedMcpCommands: ["node", "python", "uvx"],
+        requireExplicitMcpToolPolicy: true,
+        failOnWarnings: true,
+    },
+    "plugin-review": {
+        requirePluginSkillPaths: true,
+        requireExplicitMcpToolPolicy: true,
+        failOnWarnings: false,
+    },
+};
+const POLICY_FILENAMES = [
+    ".codex-skills-registry.yaml",
+    ".codex-skills-registry.yml",
+    ".codex-skills-registry.json",
+];
+/**
+ * Loads a project policy file. When no policy is present, the permissive
+ * default policy is returned.
+ *
+ * @param cwd - Project directory.
+ * @param policyFile - Optional explicit policy file path.
+ * @returns Loaded policy and validation diagnostics.
+ */
+export async function loadRegistryPolicy(cwd, policyFile) {
+    const candidates = policyFile
+        ? [path.resolve(cwd, policyFile)]
+        : POLICY_FILENAMES.map((filename) => path.join(cwd, filename));
+    const sourcePath = await firstExistingPath(candidates);
+    if (!sourcePath) {
+        if (policyFile) {
+            const resolvedPath = path.resolve(cwd, policyFile);
+            return {
+                policy: DEFAULT_POLICY,
+                sourcePath: resolvedPath,
+                diagnostics: [
+                    {
+                        severity: "error",
+                        path: resolvedPath,
+                        message: "Policy file does not exist.",
+                    },
+                ],
+            };
+        }
+        return {
+            policy: DEFAULT_POLICY,
+            diagnostics: [],
+        };
+    }
+    try {
+        const content = await readFile(sourcePath, "utf8");
+        const parsed = sourcePath.endsWith(".json")
+            ? JSON.parse(content)
+            : parseYaml(content);
+        const validation = RegistryPolicyInputSchema.safeParse(parsed);
+        if (!validation.success) {
+            return {
+                policy: DEFAULT_POLICY,
+                sourcePath,
+                diagnostics: zodErrorToIssues(validation.error, sourcePath),
+            };
+        }
+        return {
+            policy: resolveRegistryPolicy(validation.data),
+            sourcePath,
+            diagnostics: [],
+        };
+    }
+    catch (error) {
+        return {
+            policy: DEFAULT_POLICY,
+            sourcePath,
+            diagnostics: [
+                {
+                    severity: "error",
+                    path: sourcePath,
+                    message: error instanceof Error ? error.message : String(error),
+                },
+            ],
+        };
+    }
+}
+export function resolveRegistryPolicy(input = {}) {
+    const presetNames = normalizePolicyExtends(input.extends);
+    const presetPolicy = {};
+    for (const presetName of presetNames) {
+        Object.assign(presetPolicy, REGISTRY_POLICY_PRESETS[presetName]);
+    }
+    const { extends: _extends, ...overrides } = input;
+    return RegistryPolicySchema.parse({
+        ...presetPolicy,
+        ...removeUndefinedValues(overrides),
+    });
+}
+export function formatRegistryPolicyYaml(policy) {
+    const lines = [];
+    if (policy.extends) {
+        const presetNames = normalizePolicyExtends(policy.extends);
+        lines.push("extends:");
+        for (const presetName of presetNames) {
+            lines.push(`  - ${presetName}`);
+        }
+    }
+    appendBooleanPolicyLine(lines, "requirePinnedMcpPackages", policy.requirePinnedMcpPackages);
+    appendStringListPolicyLines(lines, "allowedSkills", policy.allowedSkills);
+    appendStringListPolicyLines(lines, "deniedSkills", policy.deniedSkills);
+    appendStringListPolicyLines(lines, "allowedPlugins", policy.allowedPlugins);
+    appendStringListPolicyLines(lines, "deniedPlugins", policy.deniedPlugins);
+    appendStringListPolicyLines(lines, "allowedMcpServers", policy.allowedMcpServers);
+    appendStringListPolicyLines(lines, "deniedMcpServers", policy.deniedMcpServers);
+    appendStringListPolicyLines(lines, "allowedMcpCommands", policy.allowedMcpCommands);
+    appendStringListPolicyLines(lines, "deniedMcpCommands", policy.deniedMcpCommands);
+    appendStringListPolicyLines(lines, "allowedRemoteMcpHosts", policy.allowedRemoteMcpHosts);
+    appendStringListPolicyLines(lines, "deniedRemoteMcpHosts", policy.deniedRemoteMcpHosts);
+    appendBooleanPolicyLine(lines, "requireExplicitMcpToolPolicy", policy.requireExplicitMcpToolPolicy);
+    appendBooleanPolicyLine(lines, "requirePluginSkillPaths", policy.requirePluginSkillPaths);
+    appendBooleanPolicyLine(lines, "failOnWarnings", policy.failOnWarnings);
+    if (policy.baselineFile) {
+        lines.push(`baselineFile: ${policy.baselineFile}`);
+    }
+    if (policy.suppressions && policy.suppressions.length > 0) {
+        lines.push("suppressions:");
+        for (const suppression of policy.suppressions) {
+            lines.push("  -");
+            appendOptionalNestedLine(lines, "code", suppression.code);
+            appendOptionalNestedLine(lines, "path", suppression.path);
+            appendOptionalNestedLine(lines, "file", suppression.file);
+            appendOptionalNestedLine(lines, "reason", suppression.reason);
+            appendOptionalNestedLine(lines, "owner", suppression.owner);
+            appendOptionalNestedLine(lines, "expiresOn", suppression.expiresOn);
+        }
+    }
+    return `${lines.join("\n")}\n`;
+}
+function normalizePolicyExtends(value) {
+    if (!value) {
+        return [];
+    }
+    return Array.isArray(value) ? value : [value];
+}
+function removeUndefinedValues(value) {
+    return Object.fromEntries(Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined));
+}
+function appendBooleanPolicyLine(lines, key, value) {
+    if (typeof value === "boolean") {
+        lines.push(`${key}: ${value}`);
+    }
+}
+function appendStringListPolicyLines(lines, key, value) {
+    if (!value) {
+        return;
+    }
+    lines.push(`${key}:`);
+    for (const item of value) {
+        lines.push(`  - ${item}`);
+    }
+}
+function appendOptionalNestedLine(lines, key, value) {
+    if (value) {
+        lines.push(`    ${key}: ${JSON.stringify(value)}`);
+    }
+}
+//# sourceMappingURL=policy.js.map

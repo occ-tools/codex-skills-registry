@@ -7,6 +7,7 @@ This directory contains two small repositories for product demos and manual QA.
 ```bash
 node dist/cli.js --cwd demo/clean-project --no-examples doctor
 node dist/cli.js --cwd demo/clean-project --no-examples report
+node dist/cli.js --cwd demo/clean-project --no-examples pr-comment
 ```
 
 Expected result: one valid skill, one MCP server, no findings.
@@ -16,6 +17,8 @@ Expected result: one valid skill, one MCP server, no findings.
 ```bash
 node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
 node dist/cli.js --cwd demo/risky-project --no-examples --format sarif doctor --strict
+node dist/cli.js --cwd demo/risky-project --no-examples pr-comment
+node dist/cli.js --cwd demo/risky-project --no-examples baseline --strict --out codex-skills-baseline.json
 ```
 
 Expected result: findings for invalid skill metadata, an escaped entry point,

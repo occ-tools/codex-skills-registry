@@ -13,10 +13,10 @@ describe("sarif", () => {
           path: "mcp_servers.shell.command",
           file,
           line: 3,
-          message: "Shell command requires review."
-        }
+          message: "Shell command requires review.",
+        },
       ],
-      { cwd }
+      { cwd },
     ) as {
       runs: Array<{
         results: Array<{
@@ -45,10 +45,10 @@ describe("sarif", () => {
           severity: "error",
           path: `${file}.name`,
           file,
-          message: "Invalid skill name."
-        }
+          message: "Invalid skill name.",
+        },
       ],
-      { cwd }
+      { cwd },
     ) as {
       runs: Array<{
         tool: {

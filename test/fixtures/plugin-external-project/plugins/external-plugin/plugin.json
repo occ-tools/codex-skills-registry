@@ -1,0 +1,7 @@
+{
+  "name": "external-plugin",
+  "version": "0.1.0",
+  "description": "Plugin fixture that references MCP servers from an external JSON file.",
+  "skills": "./skills",
+  "mcpServers": "./mcp-servers.json"
+}

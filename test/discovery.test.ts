@@ -1,5 +1,14 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { discoverPluginMcpServers, discoverProject, parseSkillMarkdown } from "../src/discovery.js";
+import {
+  discoverPluginMcpServers,
+  discoverProject,
+  findSkillRoots,
+  parseSkillMarkdown,
+} from "../src/discovery.js";
+import { SkillsRegistry } from "../src/registry.js";
 
 describe("discovery", () => {
   it("parses SKILL.md frontmatter", () => {
@@ -33,12 +42,12 @@ description: Validate a skill file that was saved with a byte order mark.
     expect(result.skills.map((skill) => skill.name).sort()).toEqual([
       "issue-triage",
       "pr-review",
-      "release-notes"
+      "release-notes",
     ]);
     expect(result.mcpServers.map((server) => server.name).sort()).toEqual([
       "context7",
       "docs_search",
-      "maintainer_docs"
+      "maintainer_docs",
     ]);
     expect(result.plugins.map((plugin) => plugin.manifest.name)).toEqual(["maintainer-kit"]);
   });
@@ -46,7 +55,7 @@ description: Validate a skill file that was saved with a byte order mark.
   it("surfaces diagnostics for invalid skill fixtures", async () => {
     const result = await discoverProject({
       cwd: "test/fixtures/invalid-project",
-      includeExamples: false
+      includeExamples: false,
     });
 
     expect(result.skills).toHaveLength(0);
@@ -58,7 +67,7 @@ description: Validate a skill file that was saved with a byte order mark.
   it("records source line hints for discovered MCP server configs", async () => {
     const result = await discoverProject({
       cwd: "test/fixtures/invalid-project",
-      includeExamples: false
+      includeExamples: false,
     });
 
     const server = result.mcpServers.find((candidate) => candidate.name === "shell");
@@ -87,13 +96,13 @@ description: Validate a skill file that was saved with a byte order mark.
         mcpServers: {
           inline_docs: {
             command: "node",
-            enabled_tools: ["search"]
-          }
+            enabled_tools: ["search"],
+          },
         },
-        mcp_servers: {}
+        mcp_servers: {},
       },
       "plugin.json",
-      manifestContent
+      manifestContent,
     );
 
     expect(result.mcpServers[0]?.line).toBe(5);
@@ -103,10 +112,64 @@ description: Validate a skill file that was saved with a byte order mark.
   it("skips skills disabled by Codex skills.config", async () => {
     const result = await discoverProject({
       cwd: "test/fixtures/disabled-skill-project",
-      includeExamples: false
+      includeExamples: false,
     });
 
     expect(result.skills).toHaveLength(0);
     expect(result.diagnostics.some((issue) => issue.message.includes("disabled"))).toBe(true);
+  });
+
+  it("discovers plugin-only projects with external MCP JSON files", async () => {
+    const result = await discoverProject({
+      cwd: "test/fixtures/plugin-external-project",
+      includeExamples: false,
+    });
+
+    expect(result.plugins.map((plugin) => plugin.manifest.name)).toEqual(["external-plugin"]);
+    expect(result.mcpServers.map((server) => server.name)).toEqual(["external_docs"]);
+    expect(result.mcpServers[0]?.sourcePath.replace(/\\/g, "/")).toContain("mcp-servers.json");
+    expect(result.mcpServers[0]?.fieldLines?.command).toBe(3);
+  });
+
+  it("discovers remote MCP servers", async () => {
+    const result = await discoverProject({
+      cwd: "test/fixtures/remote-project",
+      includeExamples: false,
+    });
+
+    expect(result.mcpServers[0]?.name).toBe("remote_docs");
+    expect(result.mcpServers[0]?.config).toMatchObject({ url: "http://example.com/mcp" });
+  });
+
+  it("reports plugin path traversal diagnostics", async () => {
+    const registry = await SkillsRegistry.load({
+      cwd: "test/fixtures/path-traversal-project",
+      includeExamples: false,
+    });
+
+    expect(registry.listPlugins()).toHaveLength(1);
+    expect(
+      registry.listDiagnostics().some((issue) => issue.code === "PLUGIN_SKILL_PATH_ESCAPE"),
+    ).toBe(true);
+  });
+
+  it("finds skill roots while walking up to a .git boundary", async () => {
+    const root = path.join(tmpdir(), `codex-skill-roots-${Date.now()}`);
+    const nested = path.join(root, "packages", "app", "src");
+
+    try {
+      await mkdir(path.join(root, ".git"), { recursive: true });
+      await mkdir(path.join(root, ".agents", "skills"), { recursive: true });
+      await mkdir(nested, { recursive: true });
+      await writeFile(path.join(root, ".git", "HEAD"), "ref: refs/heads/main\n", "utf8");
+
+      const roots = await findSkillRoots(nested);
+
+      expect(roots.map((value) => value.replace(/\\/g, "/"))).toContain(
+        path.join(root, ".agents", "skills").replace(/\\/g, "/"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

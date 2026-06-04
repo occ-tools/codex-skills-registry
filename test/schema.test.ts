@@ -9,7 +9,7 @@ describe("schema", () => {
       author: "test",
       description: "Triage GitHub issues for maintainers and prepare next actions.",
       triggerType: "issue",
-      entryPoint: "scripts/run.ts"
+      entry_point: "scripts/run.ts",
     });
 
     expect(skill.name).toBe("issue-triage");
@@ -21,15 +21,15 @@ describe("schema", () => {
     expect(
       McpServerConfigSchema.safeParse({
         command: "npx",
-        args: ["-y", "@upstash/context7-mcp"]
-      }).success
+        args: ["-y", "@upstash/context7-mcp"],
+      }).success,
     ).toBe(true);
 
     expect(
       McpServerConfigSchema.safeParse({
         url: "https://example.com/mcp",
-        bearer_token_env_var: "TOKEN"
-      }).success
+        bearer_token_env_var: "TOKEN",
+      }).success,
     ).toBe(true);
   });
 });

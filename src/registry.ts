@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { auditRegistry, type AuditOptions } from "./audit.js";
@@ -8,21 +8,18 @@ import {
   type DiscoverOptions,
   type DiscoveredMcpServer,
   type DiscoveredPlugin,
-  type DiscoveryDiagnostic
+  type DiscoveryDiagnostic,
 } from "./discovery.js";
-import {
-  DEFAULT_POLICY,
-  loadRegistryPolicy,
-  type RegistryPolicy
-} from "./policy.js";
+import { DEFAULT_POLICY, loadRegistryPolicy, type RegistryPolicy } from "./policy.js";
 import {
   CodexSkillSchema,
   normalizeSkillInput,
   zodErrorToIssues,
   type CodexSkill,
   type ValidationIssue,
-  type ValidationResult
+  type ValidationResult,
 } from "./schema.js";
+import { isSubpath, relativePathInside, skillLine } from "./utils.js";
 
 export interface RegistryLoadOptions extends DiscoverOptions {
   configFile?: string;
@@ -85,7 +82,9 @@ export class SkillsRegistry {
     }
 
     if (options.configFile) {
-      await registry.loadFromConfigFile(path.resolve(options.cwd ?? process.cwd(), options.configFile));
+      await registry.loadFromConfigFile(
+        path.resolve(options.cwd ?? process.cwd(), options.configFile),
+      );
     }
 
     await registry.validatePlugins();
@@ -109,8 +108,10 @@ export class SkillsRegistry {
     if (this.skills.has(skill.name) && !options.overwrite) {
       const issue: ValidationIssue = {
         severity: "warning",
+        code: "SKILL_DUPLICATE",
         path: skill.name,
-        message: `Duplicate skill '${skill.name}' ignored. Use overwrite to replace it.`
+        message: `Duplicate skill '${skill.name}' ignored. Use overwrite to replace it.`,
+        help: "Keep skill names unique across discovered roots and config files.",
       };
       this.diagnostics.push(issue);
       return { valid: true, issues: [issue] };
@@ -138,9 +139,11 @@ export class SkillsRegistry {
     if (!skillsInput) {
       this.diagnostics.push({
         severity: "error",
+        code: "CONFIG_SKILLS_MISSING",
         path: filePath,
         file: filePath,
-        message: "Config file must be an array of skills or an object with a skills array."
+        message: "Config file must be an array of skills or an object with a skills array.",
+        help: 'Use either [{ ...skill }] or { "skills": [{ ...skill }] }.',
       });
       return;
     }
@@ -149,15 +152,17 @@ export class SkillsRegistry {
       try {
         const skill = normalizeSkillInput(input, {
           source: "config",
-          skillFile: filePath
+          skillFile: filePath,
         });
         this.registerSkill(skill, { overwrite: true });
       } catch (error) {
         this.diagnostics.push({
           severity: "error",
+          code: "CONFIG_SKILL_INVALID",
           path: `${filePath}.skills.${index}`,
           file: filePath,
-          message: error instanceof Error ? error.message : String(error)
+          message: error instanceof Error ? error.message : String(error),
+          help: "Fix this skill record so it matches the registry skill schema.",
         });
       }
     }
@@ -212,10 +217,12 @@ export class SkillsRegistry {
         issues: [
           {
             severity: "error",
+            code: "SKILL_NOT_REGISTERED",
             path: name,
-            message: `Skill '${name}' is not registered.`
-          }
-        ]
+            message: `Skill '${name}' is not registered.`,
+            help: "Check the skill name or run codex-skills list to inspect registered skills.",
+          },
+        ],
       };
     }
 
@@ -227,10 +234,12 @@ export class SkillsRegistry {
       if (path.isAbsolute(skill.entryPoint) || !isSubpath(skill.rootDir, entryPath)) {
         issues.push({
           severity: "error",
+          code: "SKILL_ENTRY_POINT_ESCAPE",
           path: `${skill.name}.entryPoint`,
           file: skill.skillFile,
           line: skillLine(skill, "entryPoint"),
-          message: "Configured entryPoint must be relative and stay inside the skill directory."
+          message: "Configured entryPoint must be relative and stay inside the skill directory.",
+          help: "Use a relative entryPoint inside the discovered skill directory.",
         });
       } else {
         try {
@@ -238,10 +247,12 @@ export class SkillsRegistry {
         } catch {
           issues.push({
             severity: "error",
+            code: "SKILL_ENTRY_POINT_MISSING",
             path: entryPath,
             file: skill.skillFile,
             line: skillLine(skill, "entryPoint"),
-            message: "Configured entryPoint does not exist."
+            message: "Configured entryPoint does not exist.",
+            help: "Create the entry file or update entryPoint to the correct relative path.",
           });
         }
       }
@@ -249,7 +260,7 @@ export class SkillsRegistry {
 
     return {
       valid: issues.every((issue) => issue.severity !== "error"),
-      issues
+      issues,
     };
   }
 
@@ -324,12 +335,12 @@ export class SkillsRegistry {
     return auditRegistry(
       {
         skills: this.listSkills(),
-        mcpServers: this.listMcpServers()
+        mcpServers: this.listMcpServers(),
       },
       {
         ...options,
-        policy: options.policy ?? this.policy
-      }
+        policy: options.policy ?? this.policy,
+      },
     );
   }
 
@@ -345,7 +356,7 @@ export class SkillsRegistry {
       mcpServers: this.listMcpServers(),
       plugins: this.listPlugins(),
       diagnostics: [...this.listDiagnostics(), ...this.audit()],
-      policy: this.policy
+      policy: this.policy,
     };
 
     return options.relativePaths ? relativizeRegistryIndex(index, this.cwd) : index;
@@ -362,7 +373,7 @@ export class SkillsRegistry {
       triggers: skill.triggers.join(","),
       version: skill.version,
       source: skill.source,
-      description: skill.description
+      description: skill.description,
     }));
 
     return formatTable(rows, ["name", "triggers", "version", "source", "description"]);
@@ -374,13 +385,38 @@ export class SkillsRegistry {
 
   private async validatePlugins(): Promise<void> {
     for (const plugin of this.plugins) {
+      if (
+        this.policy.allowedPlugins &&
+        !this.policy.allowedPlugins.includes(plugin.manifest.name)
+      ) {
+        this.diagnostics.push({
+          severity: "error",
+          code: "PLUGIN_NOT_ALLOWED",
+          path: `${plugin.sourcePath}.name`,
+          file: plugin.sourcePath,
+          message: `Plugin '${plugin.manifest.name}' is not allowed by project policy.`,
+          help: "Add the plugin name to allowedPlugins or remove the plugin manifest.",
+        });
+      }
+
+      if (this.policy.deniedPlugins?.includes(plugin.manifest.name)) {
+        this.diagnostics.push({
+          severity: "error",
+          code: "PLUGIN_DENIED",
+          path: `${plugin.sourcePath}.name`,
+          file: plugin.sourcePath,
+          message: `Plugin '${plugin.manifest.name}' is denied by project policy.`,
+          help: "Remove this plugin or update deniedPlugins after review.",
+        });
+      }
+
       const declaredMcpServers = new Set([
         ...Object.keys(plugin.manifest.mcp_servers),
         ...(plugin.manifest.mcpServers &&
         typeof plugin.manifest.mcpServers === "object" &&
         !Array.isArray(plugin.manifest.mcpServers)
           ? Object.keys(plugin.manifest.mcpServers)
-          : [])
+          : []),
       ]);
 
       const skillReferences = await this.resolvePluginSkillReferences(plugin);
@@ -389,9 +425,11 @@ export class SkillsRegistry {
           if (this.policy.requirePluginSkillPaths) {
             this.diagnostics.push({
               severity: "error",
+              code: "PLUGIN_SKILL_PATH_REQUIRED",
               path: `${plugin.sourcePath}.skills.${index}`,
               file: plugin.sourcePath,
-              message: "Project policy requires plugin skill references to include a path."
+              message: "Project policy requires plugin skill references to include a path.",
+              help: "Use skill objects with both name and path so CI can verify bundled skill files.",
             });
           }
           continue;
@@ -401,9 +439,11 @@ export class SkillsRegistry {
         if (!isSubpath(plugin.rootDir, skillPath)) {
           this.diagnostics.push({
             severity: "error",
+            code: "PLUGIN_SKILL_PATH_ESCAPE",
             path: `${plugin.sourcePath}.skills.${index}.path`,
             file: plugin.sourcePath,
-            message: "Plugin skill path must stay inside the plugin root."
+            message: "Plugin skill path must stay inside the plugin root.",
+            help: "Use a relative path inside the plugin directory.",
           });
           continue;
         }
@@ -418,20 +458,24 @@ export class SkillsRegistry {
           if (reference.name && reference.name !== discoveredName) {
             this.diagnostics.push({
               severity: "error",
+              code: "PLUGIN_SKILL_NAME_MISMATCH",
               path: `${plugin.sourcePath}.skills.${index}.name`,
               file: plugin.sourcePath,
-              message: `Plugin declares skill '${reference.name}' but SKILL.md declares '${discoveredName}'.`
+              message: `Plugin declares skill '${reference.name}' but SKILL.md declares '${discoveredName}'.`,
+              help: "Make the plugin manifest skill name match the referenced SKILL.md frontmatter.",
             });
           }
         } catch (error) {
           this.diagnostics.push({
             severity: "error",
+            code: "PLUGIN_SKILL_PATH_INVALID",
             path: `${plugin.sourcePath}.skills.${index}.path`,
             file: plugin.sourcePath,
             message:
               error instanceof Error
                 ? `Plugin skill path '${reference.path}' is invalid: ${error.message}`
-                : `Plugin skill path '${reference.path}' is invalid.`
+                : `Plugin skill path '${reference.path}' is invalid.`,
+            help: "Point the plugin skill reference at a directory containing SKILL.md.",
           });
         }
       }
@@ -440,10 +484,12 @@ export class SkillsRegistry {
         if (!this.mcpServers.some((server) => server.name === serverName)) {
           this.diagnostics.push({
             severity: "warning",
+            code: "PLUGIN_MCP_NOT_DISCOVERED",
             path: `${plugin.sourcePath}.mcp_servers.${serverName}`,
             file: plugin.sourcePath,
             message:
-              "Plugin bundles an MCP server that is not present in the discovered project config; this is allowed but should be reviewed."
+              "Plugin bundles an MCP server that is not present in the discovered project config; this is allowed but should be reviewed.",
+            help: "Confirm whether this bundled MCP server should be enabled by project config.",
           });
         }
       }
@@ -451,7 +497,7 @@ export class SkillsRegistry {
   }
 
   private async resolvePluginSkillReferences(
-    plugin: DiscoveredPlugin
+    plugin: DiscoveredPlugin,
   ): Promise<Array<string | { name?: string; path: string }>> {
     if (!plugin.manifest.skills) {
       return [];
@@ -465,31 +511,33 @@ export class SkillsRegistry {
     if (!isSubpath(plugin.rootDir, skillsRoot)) {
       this.diagnostics.push({
         severity: "error",
+        code: "PLUGIN_SKILLS_PATH_ESCAPE",
         path: `${plugin.sourcePath}.skills`,
         file: plugin.sourcePath,
-        message: "Plugin skills path must stay inside the plugin root."
+        message: "Plugin skills path must stay inside the plugin root.",
+        help: "Use a plugin-local skills path such as ./skills.",
       });
       return [];
     }
 
     try {
-      const entries = await import("node:fs/promises").then((fs) =>
-        fs.readdir(skillsRoot, { withFileTypes: true })
-      );
+      const entries = await readdir(skillsRoot, { withFileTypes: true });
       return entries
         .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
         .map((entry) => ({
-          path: path.relative(plugin.rootDir, path.join(skillsRoot, entry.name))
+          path: path.relative(plugin.rootDir, path.join(skillsRoot, entry.name)),
         }));
     } catch (error) {
       this.diagnostics.push({
         severity: "error",
+        code: "PLUGIN_SKILLS_PATH_INVALID",
         path: `${plugin.sourcePath}.skills`,
         file: plugin.sourcePath,
         message:
           error instanceof Error
             ? `Plugin skills path '${plugin.manifest.skills}' is invalid: ${error.message}`
-            : `Plugin skills path '${plugin.manifest.skills}' is invalid.`
+            : `Plugin skills path '${plugin.manifest.skills}' is invalid.`,
+        help: "Point plugin skills to an existing directory inside the plugin root.",
       });
       return [];
     }
@@ -504,7 +552,7 @@ export class SkillsRegistry {
  */
 export function formatValidationIssues(
   issues: ValidationIssue[],
-  options: { cwd?: string } = {}
+  options: { cwd?: string } = {},
 ): string {
   if (issues.length === 0) {
     return "No validation issues found.";
@@ -514,7 +562,9 @@ export function formatValidationIssues(
     .map((issue) => {
       const displayPath = issueDisplayPath(issue, options.cwd);
       const location = issueLocation(issue, options.cwd);
-      return `[${issue.severity.toUpperCase()}] ${displayPath}${location ? ` (${location})` : ""}: ${issue.message}`;
+      const code = issue.code ? ` [${issue.code}]` : "";
+      const help = issue.help ? ` ${issue.help}` : "";
+      return `[${issue.severity.toUpperCase()}] ${displayPath}${location ? ` (${location})` : ""}${code}: ${issue.message}${help}`;
     })
     .join("\n");
 }
@@ -540,8 +590,8 @@ function formatTable<T extends Record<string, string>>(rows: T[], columns: (keyo
   const widths = Object.fromEntries(
     columns.map((column) => [
       column,
-      Math.max(String(column).length, ...rows.map((row) => String(row[column]).length))
-    ])
+      Math.max(String(column).length, ...rows.map((row) => String(row[column]).length)),
+    ]),
   ) as Record<keyof T, number>;
 
   const header = columns.map((column) => String(column).padEnd(widths[column])).join("  ");
@@ -578,22 +628,24 @@ function relativizeRegistryIndex(index: RegistryIndex, cwd: string): RegistryInd
     skills: index.skills.map((skill) => ({
       ...skill,
       rootDir: relativizePathValue(skill.rootDir, root),
-      skillFile: relativizePathValue(skill.skillFile, root)
+      skillFile: relativizePathValue(skill.skillFile, root),
     })),
     mcpServers: index.mcpServers.map((server) => ({
       ...server,
-      sourcePath: relativizePathValue(server.sourcePath, root) ?? server.sourcePath
+      sourcePath: relativizePathValue(server.sourcePath, root) ?? server.sourcePath,
     })),
     plugins: index.plugins.map((plugin) => ({
       ...plugin,
       sourcePath: relativizePathValue(plugin.sourcePath, root) ?? plugin.sourcePath,
-      rootDir: relativizePathValue(plugin.rootDir, root) ?? plugin.rootDir
+      rootDir: relativizePathValue(plugin.rootDir, root) ?? plugin.rootDir,
     })),
     diagnostics: index.diagnostics.map((issue) => ({
       ...issue,
-      path: issue.file ? issue.path.replace(issue.file, relativizePathValue(issue.file, root) ?? issue.file) : issue.path,
-      file: relativizePathValue(issue.file, root)
-    }))
+      path: issue.file
+        ? issue.path.replace(issue.file, relativizePathValue(issue.file, root) ?? issue.file)
+        : issue.path,
+      file: relativizePathValue(issue.file, root),
+    })),
   };
 }
 
@@ -606,17 +658,15 @@ function relativizePathValue(value: string | undefined, root: string): string | 
   return (relative ?? value).replace(/\\/g, "/");
 }
 
-function isSubpath(root: string, candidate: string): boolean {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
 function issueLocation(issue: ValidationIssue, cwd?: string): string | undefined {
   if (!issue.file) {
     return undefined;
   }
 
-  const file = cwd && path.isAbsolute(issue.file) ? relativePathInside(path.resolve(cwd), issue.file) : undefined;
+  const file =
+    cwd && path.isAbsolute(issue.file)
+      ? relativePathInside(path.resolve(cwd), issue.file)
+      : undefined;
   const displayFile = (file ?? issue.file).replace(/\\/g, "/");
   return issue.line ? `${displayFile}:${issue.line}` : displayFile;
 }
@@ -627,20 +677,7 @@ function issueDisplayPath(issue: ValidationIssue, cwd?: string): string {
   }
 
   const file = relativePathInside(path.resolve(cwd), issue.file);
-  return file ? issue.path.replace(issue.file, file.replace(/\\/g, "/")) : issue.path.replace(/\\/g, "/");
-}
-
-function relativePathInside(root: string, candidate: string): string | undefined {
-  const relative = path.relative(root, path.resolve(candidate));
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : undefined;
-}
-
-function skillLine(skill: CodexSkill, field: string): number | undefined {
-  const sourceLines = skill.metadata.sourceLines;
-  if (!sourceLines || typeof sourceLines !== "object" || Array.isArray(sourceLines)) {
-    return undefined;
-  }
-
-  const line = (sourceLines as Record<string, unknown>)[field];
-  return typeof line === "number" ? line : undefined;
+  return file
+    ? issue.path.replace(issue.file, file.replace(/\\/g, "/"))
+    : issue.path.replace(/\\/g, "/");
 }

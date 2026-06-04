@@ -1,0 +1,609 @@
+import { readdir, readFile, stat } from "node:fs/promises";
+import path from "node:path";
+import { ZodError } from "zod";
+import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
+import { CodexSkillSchema, McpConfigFileSchema, McpServerConfigSchema, PluginManifestSchema, normalizeSkillInput, zodErrorToIssues, } from "./schema.js";
+import { countChar, escapeRegExp, firstExistingPath, isSubpath, pathExists } from "./utils.js";
+const EMPTY_RESULT = {
+    skills: [],
+    mcpServers: [],
+    plugins: [],
+    diagnostics: [],
+};
+/**
+ * Discovers Codex Skills, MCP server definitions, and plugin manifests from a
+ * project tree. By default it also includes the bundled examples so a fresh
+ * clone can demonstrate useful output immediately.
+ *
+ * @param options - Discovery roots and behavior switches.
+ * @returns Normalized registry inputs plus validation diagnostics.
+ */
+export async function discoverProject(options = {}) {
+    const cwd = path.resolve(options.cwd ?? process.cwd());
+    const result = cloneEmptyResult();
+    const skillRoots = options.skillRoots?.map((root) => path.resolve(cwd, root)) ?? [
+        ...(await findSkillRoots(cwd)),
+    ];
+    const mcpConfigPaths = options.mcpConfigPaths?.map((file) => path.resolve(cwd, file)) ?? [
+        path.join(cwd, ".codex", "config.toml"),
+    ];
+    const pluginRoots = options.pluginRoots?.map((root) => path.resolve(cwd, root)) ?? [
+        path.join(cwd, "plugins"),
+    ];
+    if (options.includeExamples !== false) {
+        skillRoots.push(path.join(cwd, "examples", ".agents", "skills"));
+        mcpConfigPaths.push(path.join(cwd, "examples", ".codex", "config.toml"));
+        pluginRoots.push(path.join(cwd, "examples", "plugins"));
+    }
+    const disabledSkills = await discoverDisabledSkillNames(unique(mcpConfigPaths));
+    for (const root of unique(skillRoots)) {
+        mergeResult(result, await discoverSkillsFromRoot(root, root.includes(`${path.sep}examples${path.sep}`) ? "example" : "project", disabledSkills));
+    }
+    for (const filePath of unique(mcpConfigPaths)) {
+        mergeResult(result, await discoverMcpServersFromConfig(filePath));
+    }
+    for (const root of unique(pluginRoots)) {
+        mergeResult(result, await discoverPluginsFromRoot(root));
+    }
+    return result;
+}
+/**
+ * Finds .agents/skills directories from the current working directory up to the
+ * repository root or filesystem root.
+ *
+ * @param startDir - Directory where Codex was launched.
+ * @returns Existing skill root directories.
+ */
+export async function findSkillRoots(startDir) {
+    const roots = [];
+    let current = path.resolve(startDir);
+    while (true) {
+        const candidate = path.join(current, ".agents", "skills");
+        if (await pathExists(candidate)) {
+            roots.push(candidate);
+        }
+        const parent = path.dirname(current);
+        if (parent === current || (await pathExists(path.join(current, ".git")))) {
+            break;
+        }
+        current = parent;
+    }
+    return roots;
+}
+/**
+ * Loads all direct child skill directories under a Codex skill root.
+ *
+ * @param root - Directory containing one child folder per skill.
+ * @param source - Registry source label used in normalized entries.
+ * @returns Discovered skills and diagnostics.
+ */
+export async function discoverSkillsFromRoot(root, source = "project", disabledSkills = new Set()) {
+    const result = cloneEmptyResult();
+    if (!(await pathExists(root))) {
+        return result;
+    }
+    const entries = await readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+        const skillDir = path.join(root, entry.name);
+        if (!(entry.isDirectory() || entry.isSymbolicLink()) || !(await isDirectory(skillDir))) {
+            continue;
+        }
+        const skillFile = path.join(skillDir, "SKILL.md");
+        if (!(await pathExists(skillFile))) {
+            result.diagnostics.push({
+                severity: "warning",
+                code: "SKILL_FILE_MISSING",
+                path: skillDir,
+                file: skillDir,
+                message: "Skill directory is missing SKILL.md.",
+                help: "Add SKILL.md or remove this directory from the skill root.",
+            });
+            continue;
+        }
+        const skill = await loadSkillFromDirectory(skillDir, source);
+        for (const discoveredSkill of skill.skills) {
+            if (disabledSkills.has(discoveredSkill.name)) {
+                result.diagnostics.push({
+                    severity: "warning",
+                    code: "SKILL_DISABLED",
+                    path: discoveredSkill.name,
+                    file: discoveredSkill.skillFile,
+                    message: "Skill is disabled by Codex skills.config.",
+                    help: "Enable the skill in config.toml or remove it from the registry scope.",
+                });
+                continue;
+            }
+            result.skills.push(discoveredSkill);
+        }
+        result.diagnostics.push(...skill.diagnostics);
+    }
+    return result;
+}
+/**
+ * Loads and normalizes a single Codex Skill directory.
+ *
+ * @param skillDir - Directory containing SKILL.md.
+ * @param source - Registry source label.
+ * @returns One skill entry or diagnostics when invalid.
+ */
+export async function loadSkillFromDirectory(skillDir, source = "project") {
+    const result = cloneEmptyResult();
+    const skillFile = path.join(skillDir, "SKILL.md");
+    let sourceLines = {};
+    try {
+        const markdown = await readFile(skillFile, "utf8");
+        const parsed = parseSkillMarkdown(markdown);
+        sourceLines = collectYamlFrontmatterLines(markdown);
+        const agentMetadata = await loadAgentMetadata(skillDir);
+        const defaultTriggers = inferTriggers(`${String(parsed.frontmatter.name ?? "")} ${String(parsed.frontmatter.description ?? "")}`);
+        const entryPoint = await detectEntryPoint(skillDir, parsed.frontmatter);
+        const normalized = normalizeSkillInput(parsed.frontmatter, {
+            rootDir: skillDir,
+            skillFile,
+            source,
+            triggers: defaultTriggers,
+            entryPoint,
+            metadata: {
+                body: parsed.body,
+                agent: agentMetadata,
+                sourceLines,
+            },
+        });
+        const validation = CodexSkillSchema.safeParse(normalized);
+        if (!validation.success) {
+            result.diagnostics.push(...zodErrorToIssues(validation.error, skillFile).map((issue) => ({
+                ...issue,
+                file: skillFile,
+            })));
+            return result;
+        }
+        result.skills.push(validation.data);
+    }
+    catch (error) {
+        if (error instanceof ZodError) {
+            result.diagnostics.push(...zodErrorToIssues(error, skillFile).map((issue) => ({
+                ...issue,
+                file: skillFile,
+                line: lineForIssuePath(issue.path, sourceLines),
+            })));
+            return result;
+        }
+        result.diagnostics.push({
+            severity: "error",
+            code: "SKILL_MARKDOWN_INVALID",
+            path: skillFile,
+            file: skillFile,
+            message: error instanceof Error ? error.message : String(error),
+            help: "Fix SKILL.md frontmatter and markdown structure.",
+        });
+    }
+    return result;
+}
+/**
+ * Parses Codex MCP server configuration from a config.toml file.
+ *
+ * @param filePath - TOML file path.
+ * @returns MCP server entries and diagnostics.
+ */
+export async function discoverMcpServersFromConfig(filePath) {
+    const result = cloneEmptyResult();
+    if (!(await pathExists(filePath))) {
+        return result;
+    }
+    try {
+        const content = await readFile(filePath, "utf8");
+        const lines = content.split(/\r?\n/);
+        const parsed = parseToml(content);
+        const validation = McpConfigFileSchema.safeParse(parsed);
+        if (!validation.success) {
+            result.diagnostics.push(...zodErrorToIssues(validation.error, filePath).map((issue) => ({
+                ...issue,
+                file: filePath,
+            })));
+            return result;
+        }
+        for (const [name, config] of Object.entries(validation.data.mcp_servers)) {
+            const serverValidation = McpServerConfigSchema.safeParse(config);
+            if (!serverValidation.success) {
+                result.diagnostics.push(...zodErrorToIssues(serverValidation.error, `${filePath}.mcp_servers.${name}`).map((issue) => ({
+                    ...issue,
+                    file: filePath,
+                })));
+                continue;
+            }
+            result.mcpServers.push({
+                name,
+                config: serverValidation.data,
+                sourcePath: filePath,
+                line: findTomlMcpServerLine(lines, name),
+                fieldLines: findTomlMcpServerFieldLines(lines, name),
+            });
+        }
+    }
+    catch (error) {
+        result.diagnostics.push({
+            severity: "error",
+            code: "MCP_CONFIG_PARSE_FAILED",
+            path: filePath,
+            file: filePath,
+            message: error instanceof Error ? error.message : String(error),
+            help: "Fix the MCP config file syntax and schema.",
+        });
+    }
+    return result;
+}
+/**
+ * Reads Codex skills.config entries from config.toml files and returns skills
+ * explicitly disabled with enabled = false.
+ *
+ * @param filePaths - Candidate Codex config files.
+ * @returns Disabled skill names.
+ */
+export async function discoverDisabledSkillNames(filePaths) {
+    const disabled = new Set();
+    for (const filePath of filePaths) {
+        if (!(await pathExists(filePath))) {
+            continue;
+        }
+        try {
+            const parsed = parseToml(await readFile(filePath, "utf8"));
+            const entries = extractSkillConfigEntries(parsed);
+            for (const entry of entries) {
+                if (entry.enabled === false && typeof entry.name === "string") {
+                    disabled.add(entry.name);
+                }
+            }
+        }
+        catch {
+            // Syntax errors are reported by discoverMcpServersFromConfig; avoid
+            // duplicating diagnostics in the disabled-skill pre-pass.
+        }
+    }
+    return disabled;
+}
+/**
+ * Discovers plugin manifests from a root directory. Each child can either
+ * contain plugin.json directly or a .codex-plugin/plugin.json manifest.
+ *
+ * @param root - Directory containing plugin folders.
+ * @returns Plugin manifests and diagnostics.
+ */
+export async function discoverPluginsFromRoot(root) {
+    const result = cloneEmptyResult();
+    if (!(await pathExists(root))) {
+        return result;
+    }
+    const entries = await readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+        const pluginDir = path.join(root, entry.name);
+        if (!(entry.isDirectory() || entry.isSymbolicLink()) || !(await isDirectory(pluginDir))) {
+            continue;
+        }
+        const candidates = [
+            path.join(pluginDir, ".codex-plugin", "plugin.json"),
+            path.join(pluginDir, "plugin.json"),
+        ];
+        const manifestPath = await firstExistingPath(candidates);
+        if (!manifestPath) {
+            continue;
+        }
+        try {
+            const manifestContent = await readFile(manifestPath, "utf8");
+            const parsed = JSON.parse(manifestContent);
+            const validation = PluginManifestSchema.safeParse(parsed);
+            if (!validation.success) {
+                result.diagnostics.push(...zodErrorToIssues(validation.error, manifestPath).map((issue) => ({
+                    ...issue,
+                    file: manifestPath,
+                })));
+                continue;
+            }
+            result.plugins.push({
+                manifest: validation.data,
+                sourcePath: manifestPath,
+                rootDir: pluginDir,
+            });
+            mergeResult(result, await discoverPluginMcpServers(pluginDir, validation.data, manifestPath, manifestContent));
+        }
+        catch (error) {
+            result.diagnostics.push({
+                severity: "error",
+                code: "PLUGIN_MANIFEST_PARSE_FAILED",
+                path: manifestPath,
+                file: manifestPath,
+                message: error instanceof Error ? error.message : String(error),
+                help: "Fix plugin.json so it is valid JSON and matches the plugin manifest schema.",
+            });
+        }
+    }
+    return result;
+}
+/**
+ * Discovers bundled MCP server definitions referenced by a plugin manifest.
+ *
+ * @param pluginDir - Plugin root directory.
+ * @param manifest - Validated plugin manifest.
+ * @param manifestPath - Manifest file path for diagnostics.
+ * @returns Discovered MCP servers and diagnostics.
+ */
+export async function discoverPluginMcpServers(pluginDir, manifest, manifestPath, manifestContent) {
+    const result = cloneEmptyResult();
+    const manifestLines = manifestContent ? manifestContent.split(/\r?\n/) : undefined;
+    const directServers = typeof manifest.mcpServers === "object" && !Array.isArray(manifest.mcpServers)
+        ? manifest.mcpServers
+        : manifest.mcp_servers;
+    for (const [name, config] of Object.entries(directServers ?? {})) {
+        const validation = McpServerConfigSchema.safeParse(config);
+        if (!validation.success) {
+            result.diagnostics.push(...zodErrorToIssues(validation.error, `${manifestPath}.mcpServers.${name}`).map((issue) => ({
+                ...issue,
+                file: manifestPath,
+            })));
+            continue;
+        }
+        result.mcpServers.push({
+            name,
+            config: validation.data,
+            sourcePath: manifestPath,
+            line: manifestLines ? findJsonPropertyLine(manifestLines, name) : undefined,
+            fieldLines: manifestLines ? findJsonNestedFieldLines(manifestLines, name) : undefined,
+        });
+    }
+    if (typeof manifest.mcpServers !== "string") {
+        return result;
+    }
+    const mcpPath = path.resolve(pluginDir, manifest.mcpServers);
+    if (!isSubpath(pluginDir, mcpPath)) {
+        result.diagnostics.push({
+            severity: "error",
+            code: "PLUGIN_MCP_PATH_ESCAPE",
+            path: `${manifestPath}.mcpServers`,
+            file: manifestPath,
+            message: "Plugin mcpServers path must stay inside the plugin root.",
+            help: "Use a plugin-local mcpServers path such as ./mcp.json.",
+        });
+        return result;
+    }
+    if (!(await pathExists(mcpPath))) {
+        result.diagnostics.push({
+            severity: "error",
+            code: "PLUGIN_MCP_PATH_MISSING",
+            path: `${manifestPath}.mcpServers`,
+            file: manifestPath,
+            message: `Plugin mcpServers file '${manifest.mcpServers}' does not exist.`,
+            help: "Create the referenced MCP server file or update the manifest path.",
+        });
+        return result;
+    }
+    try {
+        const mcpContent = await readFile(mcpPath, "utf8");
+        const mcpLines = mcpContent.split(/\r?\n/);
+        const parsed = JSON.parse(mcpContent);
+        const parsedRecord = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed
+            : {};
+        const wrapped = "mcp_servers" in parsedRecord ? McpConfigFileSchema.safeParse(parsed) : undefined;
+        const serverMap = wrapped?.success ? wrapped.data.mcp_servers : parsedRecord;
+        for (const [name, config] of Object.entries(serverMap)) {
+            const validation = McpServerConfigSchema.safeParse(config);
+            if (!validation.success) {
+                result.diagnostics.push(...zodErrorToIssues(validation.error, `${mcpPath}.${name}`).map((issue) => ({
+                    ...issue,
+                    file: mcpPath,
+                })));
+                continue;
+            }
+            result.mcpServers.push({
+                name,
+                config: validation.data,
+                sourcePath: mcpPath,
+                line: findJsonPropertyLine(mcpLines, name),
+                fieldLines: findJsonNestedFieldLines(mcpLines, name),
+            });
+        }
+    }
+    catch (error) {
+        result.diagnostics.push({
+            severity: "error",
+            code: "PLUGIN_MCP_PARSE_FAILED",
+            path: mcpPath,
+            file: mcpPath,
+            message: error instanceof Error ? error.message : String(error),
+            help: "Fix the referenced MCP server JSON file.",
+        });
+    }
+    return result;
+}
+/**
+ * Parses YAML frontmatter from SKILL.md.
+ *
+ * @param markdown - Complete SKILL.md content.
+ * @returns Frontmatter object and markdown body.
+ */
+export function parseSkillMarkdown(markdown) {
+    const normalizedMarkdown = markdown.replace(/^\uFEFF/, "");
+    const match = normalizedMarkdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
+    if (!match) {
+        throw new Error("SKILL.md must start with YAML frontmatter delimited by ---.");
+    }
+    const frontmatter = parseYaml(match[1] ?? "");
+    if (!frontmatter || typeof frontmatter !== "object" || Array.isArray(frontmatter)) {
+        throw new Error("SKILL.md frontmatter must be a YAML object.");
+    }
+    return {
+        frontmatter: frontmatter,
+        body: match[2] ?? "",
+    };
+}
+function cloneEmptyResult() {
+    return {
+        skills: [...EMPTY_RESULT.skills],
+        mcpServers: [...EMPTY_RESULT.mcpServers],
+        plugins: [...EMPTY_RESULT.plugins],
+        diagnostics: [...EMPTY_RESULT.diagnostics],
+    };
+}
+function mergeResult(target, source) {
+    target.skills.push(...source.skills);
+    target.mcpServers.push(...source.mcpServers);
+    target.plugins.push(...source.plugins);
+    target.diagnostics.push(...source.diagnostics);
+}
+async function isDirectory(filePath) {
+    try {
+        return (await stat(filePath)).isDirectory();
+    }
+    catch {
+        return false;
+    }
+}
+function unique(values) {
+    return [...new Set(values.map((value) => path.normalize(value)))];
+}
+async function loadAgentMetadata(skillDir) {
+    const agentFile = path.join(skillDir, "agents", "openai.yaml");
+    if (!(await pathExists(agentFile))) {
+        return undefined;
+    }
+    return parseYaml(await readFile(agentFile, "utf8"));
+}
+async function detectEntryPoint(skillDir, frontmatter) {
+    if (typeof frontmatter.entryPoint === "string") {
+        return frontmatter.entryPoint;
+    }
+    const candidates = [
+        "scripts/run.ts",
+        "scripts/run.js",
+        "scripts/main.ts",
+        "scripts/main.js",
+        "scripts/index.ts",
+        "scripts/index.js",
+    ];
+    for (const candidate of candidates) {
+        if (await pathExists(path.join(skillDir, candidate))) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+function inferTriggers(text) {
+    const value = text.toLowerCase();
+    const triggers = new Set();
+    if (/\b(issue|triage|bug report)\b/.test(value)) {
+        triggers.add("issue");
+    }
+    if (/\b(pr|pull request|review)\b/.test(value)) {
+        triggers.add("pr");
+    }
+    if (/\b(release|changelog|notes)\b/.test(value)) {
+        triggers.add("release");
+    }
+    if (/\b(security|vulnerability|audit)\b/.test(value)) {
+        triggers.add("security");
+    }
+    if (/\b(dependency|dependencies|deps)\b/.test(value)) {
+        triggers.add("dependency");
+    }
+    return triggers.size > 0 ? [...triggers] : ["manual"];
+}
+function extractSkillConfigEntries(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return [];
+    }
+    const record = input;
+    const skills = record.skills;
+    if (!skills || typeof skills !== "object" || Array.isArray(skills)) {
+        return [];
+    }
+    const config = skills.config;
+    if (Array.isArray(config)) {
+        return config.filter((entry) => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)));
+    }
+    if (config && typeof config === "object") {
+        return Object.entries(config)
+            .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value))
+            .map(([name, value]) => ({
+            name,
+            ...value,
+        }));
+    }
+    return [];
+}
+function collectYamlFrontmatterLines(markdown) {
+    const lines = markdown.replace(/^\uFEFF/, "").split(/\r?\n/);
+    const sourceLines = {};
+    if (lines[0]?.trim() !== "---") {
+        return sourceLines;
+    }
+    for (let index = 1; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (line?.trim() === "---") {
+            break;
+        }
+        const match = line?.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s*:/);
+        if (match?.[1]) {
+            sourceLines[match[1]] = index + 1;
+        }
+    }
+    return sourceLines;
+}
+function lineForIssuePath(pathValue, sourceLines) {
+    const field = Object.keys(sourceLines).find((key) => pathValue.endsWith(`.${key}`));
+    return field ? sourceLines[field] : undefined;
+}
+function findTomlMcpServerLine(lines, name) {
+    return findTomlMcpServerHeader(lines, name)?.line;
+}
+function findTomlMcpServerFieldLines(lines, name) {
+    const header = findTomlMcpServerHeader(lines, name);
+    if (!header) {
+        return {};
+    }
+    const fieldLines = {};
+    for (let index = header.index + 1; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        if (/^\s*\[/.test(line)) {
+            break;
+        }
+        const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=/);
+        if (match?.[1]) {
+            fieldLines[match[1]] = index + 1;
+        }
+    }
+    return fieldLines;
+}
+function findTomlMcpServerHeader(lines, name) {
+    const escapedName = escapeRegExp(name);
+    const headerPattern = new RegExp(`^\\s*\\[\\s*mcp_servers\\.(?:"${escapedName}"|'${escapedName}'|${escapedName})\\s*\\]\\s*$`);
+    const index = lines.findIndex((line) => headerPattern.test(line));
+    return index >= 0 ? { index, line: index + 1 } : undefined;
+}
+function findJsonPropertyLine(lines, key) {
+    const propertyPattern = new RegExp(`"${escapeRegExp(key)}"\\s*:`);
+    const index = lines.findIndex((line) => propertyPattern.test(line));
+    return index >= 0 ? index + 1 : undefined;
+}
+function findJsonNestedFieldLines(lines, objectKey) {
+    const startIndex = lines.findIndex((line) => new RegExp(`"${escapeRegExp(objectKey)}"\\s*:`).test(line));
+    const fieldLines = {};
+    if (startIndex < 0) {
+        return fieldLines;
+    }
+    let depth = 0;
+    for (let index = startIndex; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        if (depth > 0) {
+            const match = line.match(/^\s*"([^"]+)"\s*:/);
+            if (match?.[1] && match[1] !== objectKey) {
+                fieldLines[match[1]] = index + 1;
+            }
+        }
+        depth += countChar(line, "{") - countChar(line, "}");
+        if (index > startIndex && depth <= 0) {
+            break;
+        }
+    }
+    return fieldLines;
+}
+//# sourceMappingURL=discovery.js.map

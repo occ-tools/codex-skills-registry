@@ -1,6 +1,10 @@
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { formatRegistryPolicyYaml, loadRegistryPolicy, resolveRegistryPolicy } from "../src/policy.js";
+import {
+  formatRegistryPolicyYaml,
+  loadRegistryPolicy,
+  resolveRegistryPolicy,
+} from "../src/policy.js";
 import { SkillsRegistry } from "../src/registry.js";
 
 const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "policy-project");
@@ -29,7 +33,7 @@ describe("policy", () => {
   it("applies policy to MCP audit rules", async () => {
     const registry = await SkillsRegistry.load({
       cwd: fixtureRoot,
-      includeExamples: false
+      includeExamples: false,
     });
 
     expect(registry.audit().some((issue) => issue.severity === "error")).toBe(true);
@@ -38,7 +42,7 @@ describe("policy", () => {
   it("resolves named policy presets with local overrides", () => {
     const policy = resolveRegistryPolicy({
       extends: ["recommended"],
-      failOnWarnings: true
+      failOnWarnings: true,
     });
 
     expect(policy.requirePinnedMcpPackages).toBe(true);
@@ -50,11 +54,23 @@ describe("policy", () => {
   it("formats starter policy YAML", () => {
     const yaml = formatRegistryPolicyYaml({
       extends: ["recommended"],
-      failOnWarnings: false
+      deniedMcpCommands: ["bash"],
+      baselineFile: "codex-skills-baseline.json",
+      failOnWarnings: false,
+      suppressions: [
+        {
+          code: "MCP_SHELL_COMMAND",
+          reason: "Local fixture reviewed by maintainers",
+          expiresOn: "2099-01-01",
+        },
+      ],
     });
 
     expect(yaml).toContain("extends:");
     expect(yaml).toContain("  - recommended");
+    expect(yaml).toContain("deniedMcpCommands:");
+    expect(yaml).toContain("baselineFile: codex-skills-baseline.json");
+    expect(yaml).toContain("suppressions:");
     expect(yaml).toContain("failOnWarnings: false");
   });
 });
