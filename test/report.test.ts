@@ -94,10 +94,41 @@ describe("report", () => {
       plugins: [],
       workflows: [],
       issues: [],
-      nextActions: [],
+      nextActions: ["Review <unsafe> values."],
     });
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("Codex Skills Registry Report");
+    expect(html).toContain("<h2>Next Actions</h2>");
+    expect(html).toContain("Review &lt;unsafe&gt; values.");
+    expect(html).not.toContain("Review <unsafe> values.");
+  });
+
+  it("escapes MCP transport values in HTML reports", () => {
+    const html = formatRegistryReportHtml({
+      summary: {
+        skills: 0,
+        mcpServers: 1,
+        plugins: 0,
+        workflows: 0,
+        errors: 0,
+        warnings: 0,
+      },
+      skills: [],
+      mcpServers: [
+        {
+          name: "remote",
+          sourcePath: ".codex/config.toml",
+          transport: "<script>" as never,
+        },
+      ],
+      plugins: [],
+      workflows: [],
+      issues: [],
+      nextActions: [],
+    });
+
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("(<script>)");
   });
 });

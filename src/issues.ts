@@ -63,7 +63,10 @@ export function applyIssuePolicyFilters(
       continue;
     }
 
-    if (baselineFingerprints.has(issueFingerprint(issue, options))) {
+    if (
+      baselineFingerprints.has(issueFingerprint(issue, options)) ||
+      baselineFingerprints.has(legacyIssueFingerprint(issue, options))
+    ) {
       baselineIssues.push(issue);
       continue;
     }
@@ -87,6 +90,16 @@ export function issueCode(issue: ValidationIssue): string {
 }
 
 export function issueFingerprint(issue: ValidationIssue, options: { cwd?: string } = {}): string {
+  const parts = [
+    issueCode(issue),
+    issue.path.replace(/\\/g, "/"),
+    displayIssueFile(issue, options.cwd) ?? "",
+  ];
+
+  return createHash("sha256").update(parts.join("\n")).digest("hex");
+}
+
+function legacyIssueFingerprint(issue: ValidationIssue, options: { cwd?: string } = {}): string {
   const parts = [
     issueCode(issue),
     issue.path.replace(/\\/g, "/"),
@@ -159,8 +172,42 @@ function isExpiredDate(value: string, today = new Date()): boolean {
 function globMatch(value: string, pattern: string): boolean {
   const normalizedValue = value.replace(/\\/g, "/");
   const normalizedPattern = pattern.replace(/\\/g, "/");
-  const regex = new RegExp(`^${normalizedPattern.split("*").map(escapeRegExp).join(".*")}$`);
+  const regex = new RegExp(`^${globPatternToRegexSource(normalizedPattern)}$`);
   return regex.test(normalizedValue);
+}
+
+function globPatternToRegexSource(pattern: string): string {
+  let source = "";
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
+
+    if (char === "*" && next === "*") {
+      if (pattern[index + 2] === "/") {
+        source += "(?:.*/)?";
+        index += 2;
+      } else {
+        source += ".*";
+        index += 1;
+      }
+      continue;
+    }
+
+    if (char === "*") {
+      source += "[^/]*";
+      continue;
+    }
+
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+
+    source += escapeRegExp(char ?? "");
+  }
+
+  return source;
 }
 
 function slugifyIssueCode(value: string): string {

@@ -10,7 +10,7 @@ export async function publishPullRequestComment(options) {
     const repository = options.repository;
     const pullRequestNumber = options.pullRequestNumber;
     const apiUrl = options.apiUrl ?? "https://api.github.com";
-    const marker = options.marker ?? DEFAULT_MARKER;
+    const marker = normalizeCommentMarker(options.marker);
     if (!token) {
         return { posted: false, updated: false, skippedReason: "GITHUB_TOKEN is not set." };
     }
@@ -26,7 +26,7 @@ export async function publishPullRequestComment(options) {
     }
     const body = withCommentMarker(options.body, marker);
     const commentsPath = `/repos/${repository}/issues/${pullRequestNumber}/comments`;
-    const comments = await githubRequest(apiUrl, commentsPath, token);
+    const comments = await listPullRequestComments(apiUrl, commentsPath, token);
     const existing = comments.find((comment) => comment.body?.includes(marker));
     if (existing) {
         const updated = await githubRequest(apiUrl, `/repos/${repository}/issues/comments/${existing.id}`, token, {
@@ -51,6 +51,19 @@ export async function publishPullRequestComment(options) {
 }
 function withCommentMarker(body, marker) {
     return body.includes(marker) ? body : `${marker}\n${body}`;
+}
+function normalizeCommentMarker(marker) {
+    return marker && marker.trim().length > 0 ? marker : DEFAULT_MARKER;
+}
+async function listPullRequestComments(apiUrl, commentsPath, token) {
+    const comments = [];
+    for (let page = 1;; page += 1) {
+        const pageComments = await githubRequest(apiUrl, `${commentsPath}?per_page=100&page=${page}`, token);
+        comments.push(...pageComments);
+        if (pageComments.length < 100) {
+            return comments;
+        }
+    }
 }
 async function githubRequest(apiUrl, path, token, init = {}) {
     const response = await fetch(`${apiUrl.replace(/\/$/, "")}${path}`, {

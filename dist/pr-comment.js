@@ -41,9 +41,11 @@ function formatFindingRows(issues, maxFindings) {
         return ["No active findings."];
     }
     const rows = issues.slice(0, maxFindings).map((issue) => {
-        const location = issue.file ? ` (${issue.file}${issue.line ? `:${issue.line}` : ""})` : "";
-        const help = issue.help ? ` ${issue.help}` : "";
-        return `- [${issue.severity.toUpperCase()}] ${issueCode(issue)} ${issue.path}${location}: ${issue.message}${help}`;
+        const location = issue.file
+            ? ` (${codeSpan(`${issue.file}${issue.line ? `:${issue.line}` : ""}`)})`
+            : "";
+        const help = issue.help ? ` ${escapeMarkdownText(issue.help)}` : "";
+        return `- [${issue.severity.toUpperCase()}] ${codeSpan(issueCode(issue))} ${codeSpan(issue.path)}${location}: ${escapeMarkdownText(issue.message)}${help}`;
     });
     if (issues.length > maxFindings) {
         rows.push(`- ${issues.length - maxFindings} additional finding(s) omitted from this comment.`);
@@ -54,16 +56,25 @@ function formatNextActions(nextActions) {
     if (nextActions.length === 0) {
         return ["No immediate action required."];
     }
-    return nextActions.map((action) => `- ${action}`);
+    return nextActions.map((action) => `- ${escapeMarkdownText(action)}`);
 }
 function formatArtifacts(options) {
     const rows = [];
     if (options.reportPath) {
-        rows.push(`- Report: ${options.reportPath}`);
+        rows.push(`- Report: ${escapeMarkdownText(options.reportPath)}`);
     }
     if (options.sarifPath) {
-        rows.push(`- SARIF: ${options.sarifPath}`);
+        rows.push(`- SARIF: ${escapeMarkdownText(options.sarifPath)}`);
     }
     return rows.length > 0 ? rows : ["No artifact paths were provided."];
+}
+function escapeMarkdownText(value) {
+    return value
+        .replace(/\\/g, "\\\\")
+        .replace(/([*_`[\]()#+!|<>])/g, "\\$1")
+        .replace(/@/g, "&#64;");
+}
+function codeSpan(value) {
+    return value.includes("`") ? `\`\` ${value} \`\`` : `\`${value}\``;
 }
 //# sourceMappingURL=pr-comment.js.map

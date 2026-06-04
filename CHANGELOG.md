@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- Make issue baselines stable across finding message rewording while preserving compatibility with existing baseline files.
+- Tighten suppression glob behavior so `*` stays within one path segment and `**` is required for cross-directory matches.
+- Complete the rule explanation catalog for every emitted issue code and add coverage to keep it in sync.
+- Include validation and audit findings in `pr-comment`, add `pr-comment --strict`, and align composite Action issue outputs with the generated PR comment.
+- Move composite Action and release helper scripts into typed, tested `dist` entry points.
+- Harden PR comment publishing with marker normalization, paginated comment lookup, and Markdown escaping.
+- Use trusted base action code for the repository PR-comment workflow while scanning pull request contents separately.
+- Add HTML report Next Actions, escape all MCP transport rendering, and improve baseline diagnostic labels.
+- Validate suppression expiry dates as real calendar dates and isolate CLI tests from shared fixtures.
+
 ## 0.5.1
 
 - Fix composite Action manifest YAML parsing for the `post-comment` input description.

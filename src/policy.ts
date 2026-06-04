@@ -27,6 +27,7 @@ const SuppressionSchema = z
     expiresOn: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine(isRealIsoDate, "expiresOn must be a real calendar date.")
       .optional(),
   })
   .strict()
@@ -241,13 +242,24 @@ export function formatRegistryPolicyYaml(policy: RegistryPolicyInput): string {
   if (policy.suppressions && policy.suppressions.length > 0) {
     lines.push("suppressions:");
     for (const suppression of policy.suppressions) {
-      lines.push("  -");
-      appendOptionalNestedLine(lines, "code", suppression.code);
-      appendOptionalNestedLine(lines, "path", suppression.path);
-      appendOptionalNestedLine(lines, "file", suppression.file);
-      appendOptionalNestedLine(lines, "reason", suppression.reason);
-      appendOptionalNestedLine(lines, "owner", suppression.owner);
-      appendOptionalNestedLine(lines, "expiresOn", suppression.expiresOn);
+      const entries = [
+        ["code", suppression.code],
+        ["path", suppression.path],
+        ["file", suppression.file],
+        ["reason", suppression.reason],
+        ["owner", suppression.owner],
+        ["expiresOn", suppression.expiresOn],
+      ].filter((entry): entry is [string, string] => typeof entry[1] === "string");
+
+      const [first, ...rest] = entries;
+      if (!first) {
+        continue;
+      }
+
+      lines.push(`  - ${first[0]}: ${JSON.stringify(first[1])}`);
+      for (const [key, value] of rest) {
+        appendOptionalNestedLine(lines, key, value);
+      }
     }
   }
 
@@ -266,6 +278,22 @@ function removeUndefinedValues<T extends Record<string, unknown>>(value: T): Par
   return Object.fromEntries(
     Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined),
   ) as Partial<T>;
+}
+
+function isRealIsoDate(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
 }
 
 function appendBooleanPolicyLine(lines: string[], key: string, value: boolean | undefined): void {

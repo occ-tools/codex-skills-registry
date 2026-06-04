@@ -98,13 +98,16 @@ export function formatRegistryReportHtml(report) {
         : `<ul>${report.skills.map((skill) => `<li><strong>${escapeHtml(skill.name)}</strong> (${escapeHtml(skill.triggers.join(", "))}) - ${escapeHtml(skill.description)}</li>`).join("")}</ul>`;
     const mcpServers = report.mcpServers.length === 0
         ? "<p>No MCP servers discovered.</p>"
-        : `<ul>${report.mcpServers.map((server) => `<li><strong>${escapeHtml(server.name)}</strong> (${server.transport}) - ${escapeHtml(server.sourcePath)}</li>`).join("")}</ul>`;
+        : `<ul>${report.mcpServers.map((server) => `<li><strong>${escapeHtml(server.name)}</strong> (${escapeHtml(server.transport)}) - ${escapeHtml(server.sourcePath)}</li>`).join("")}</ul>`;
     const plugins = report.plugins.length === 0
         ? "<p>No plugin manifests discovered.</p>"
         : `<ul>${report.plugins.map((plugin) => `<li><strong>${escapeHtml(plugin.name)}</strong> - ${escapeHtml(plugin.sourcePath)}</li>`).join("")}</ul>`;
     const workflows = report.workflows.length === 0
         ? "<p>No GitHub Actions workflows discovered.</p>"
         : `<ul>${report.workflows.map((workflow) => `<li><strong>${escapeHtml(workflow.name)}</strong> - ${escapeHtml(workflow.sourcePath)} (${workflow.jobs} job${workflow.jobs === 1 ? "" : "s"}, ${workflow.actions} action reference${workflow.actions === 1 ? "" : "s"})</li>`).join("")}</ul>`;
+    const nextActions = report.nextActions.length === 0
+        ? "<p>No immediate action required.</p>"
+        : `<ul>${report.nextActions.map((action) => `<li>${escapeHtml(action)}</li>`).join("")}</ul>`;
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -145,6 +148,8 @@ export function formatRegistryReportHtml(report) {
     ${workflows}
     <h2>Findings</h2>
     ${findings}
+    <h2>Next Actions</h2>
+    ${nextActions}
   </main>
 </body>
 </html>

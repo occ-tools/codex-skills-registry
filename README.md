@@ -44,7 +44,7 @@ release notes, dependency review, and security-oriented automation.
 
 ## Status
 
-Version 0.5 validates, indexes, audits, exports schemas for, reports on, and
+Version 0.6 validates, indexes, audits, exports schemas for, reports on, and
 mock-runs workflow definitions. It does not execute arbitrary skill scripts.
 
 ## Why this exists
@@ -283,8 +283,12 @@ codex-skills baseline --strict --out codex-skills-baseline.json
 codex-skills doctor --strict --baseline codex-skills-baseline.json
 ```
 
-Every finding has a stable issue code and a deterministic fingerprint. Use
-`explain` to inspect the intent and remediation for common rules:
+Every finding has a stable issue code and a deterministic fingerprint. Baseline
+fingerprints are tied to the issue code, path, and file, so wording-only
+message changes do not invalidate an existing baseline; older baseline files
+remain compatible. Suppression globs use `*` for one path segment, `**` for
+cross-directory matches, and `?` for one character. Use `explain` to inspect
+the intent and remediation for common rules:
 
 ```bash
 codex-skills explain MCP_UNPINNED_NPX
@@ -343,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.5.1
+      - uses: wangjiehu/codex-skills-registry@v0.6.0
         with:
           path: .
           command: doctor
@@ -368,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.5.1
+      - uses: wangjiehu/codex-skills-registry@v0.6.0
         with:
           path: .
           command: doctor
@@ -381,7 +385,8 @@ Supported action commands are `doctor`, `validate`, `list`, `audit`, `export`,
 `report`, `schema`, `pr-comment`, `baseline`, and `site`. The action emits
 GitHub annotations for diagnostics, validation issues, and audit findings.
 
-Action outputs include artifact paths plus active issue counts:
+Action outputs include artifact paths plus active issue counts from the same
+command summary used to generate the artifact or PR comment:
 
 - `index-path`, `sarif-path`, `schema-path`, `report-path`, `comment-path`,
   `baseline-path`, `site-path`
@@ -392,7 +397,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.5.1
+  uses: wangjiehu/codex-skills-registry@v0.6.0
   with:
     path: .
     command: schema
@@ -403,7 +408,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.5.1
+  uses: wangjiehu/codex-skills-registry@v0.6.0
   continue-on-error: true
   with:
     path: .
@@ -450,18 +455,28 @@ codex-skills pr-comment \
 ```
 
 To let the Action create or update the PR comment directly, grant the caller
-workflow the narrow PR write permission and enable `post-comment`:
+workflow the narrow PR write permission and enable `post-comment`. For public
+repositories, use trusted workflow/action code and scan the pull request
+contents in a separate checkout:
 
 ```yaml
+on:
+  pull_request_target:
+
 permissions:
   contents: read
   pull-requests: write
 
 steps:
   - uses: actions/checkout@v6
-  - uses: wangjiehu/codex-skills-registry@v0.5.1
     with:
-      path: .
+      repository: ${{ github.event.pull_request.head.repo.full_name }}
+      ref: ${{ github.event.pull_request.head.sha }}
+      path: target
+      persist-credentials: false
+  - uses: wangjiehu/codex-skills-registry@v0.6.0
+    with:
+      path: target
       command: pr-comment
       post-comment: "true"
 ```
@@ -541,7 +556,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.5.1` is pushed.
+Automated releases run when a semver tag such as `v0.6.0` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

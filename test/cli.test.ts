@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -129,6 +129,26 @@ describe("CLI", () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it("separates baseline load diagnostics from discovery diagnostics", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "--baseline",
+      "missing-baseline.json",
+      "validate",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("Baseline diagnostics:");
+    expect(output.match(/^Diagnostics:$/gm) ?? []).toHaveLength(1);
+    expect(process.exitCode).toBe(1);
+  });
+
   it("reports strict audit errors for risky fixtures", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -148,14 +168,15 @@ describe("CLI", () => {
   });
 
   it("filters doctor findings by changed files", async () => {
-    const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const sourceFixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-changed-"));
+    const fixtureRoot = path.join(tmp, "invalid-project");
     const changedFilesPath = path.join(fixtureRoot, "changed-files.txt");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
-      await import("node:fs/promises").then((fs) =>
-        fs.writeFile(changedFilesPath, ".codex/config.toml\n", "utf8"),
-      );
+      await cp(sourceFixtureRoot, fixtureRoot, { recursive: true });
+      await writeFile(changedFilesPath, ".codex/config.toml\n", "utf8");
       await runCli([
         "node",
         "codex-skills",
@@ -173,7 +194,7 @@ describe("CLI", () => {
       expect(output).not.toContain("bad-skill");
       expect(process.exitCode).toBe(1);
     } finally {
-      await rm(changedFilesPath, { force: true });
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 
@@ -222,11 +243,14 @@ describe("CLI", () => {
   });
 
   it("exports registry indexes with project-relative paths", async () => {
-    const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const sourceFixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-export-"));
+    const fixtureRoot = path.join(tmp, "invalid-project");
     const outFile = path.join(fixtureRoot, "registry-index.json");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
+      await cp(sourceFixtureRoot, fixtureRoot, { recursive: true });
       await runCli([
         "node",
         "codex-skills",
@@ -248,7 +272,7 @@ describe("CLI", () => {
       expect(parsed.mcpServers[0]?.sourcePath).toBe(".codex/config.toml");
       expect(JSON.stringify(parsed)).not.toContain(process.cwd());
     } finally {
-      await rm(outFile, { force: true });
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 
@@ -336,11 +360,14 @@ describe("CLI", () => {
   });
 
   it("writes and applies finding baselines", async () => {
-    const fixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const sourceFixtureRoot = path.join(process.cwd(), "test", "fixtures", "invalid-project");
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-baseline-"));
+    const fixtureRoot = path.join(tmp, "invalid-project");
     const baselinePath = path.join(fixtureRoot, "codex-skills-baseline.json");
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
+      await cp(sourceFixtureRoot, fixtureRoot, { recursive: true });
       await runCli([
         "node",
         "codex-skills",
@@ -375,7 +402,7 @@ describe("CLI", () => {
       expect(output).toContain("Baseline:");
       expect(process.exitCode).toBeUndefined();
     } finally {
-      await rm(baselinePath, { force: true });
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 
@@ -399,6 +426,35 @@ describe("CLI", () => {
     expect(output).toContain("## Codex Skills Registry");
     expect(output).toContain("SCHEMA_VALIDATION_FAILED");
     expect(output).toContain("Report: codex-skills-registry-report.md");
+  });
+
+  it("prints JSON pull request comment summaries with full active findings", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "--format",
+      "json",
+      "pr-comment",
+      "--strict",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    const parsed = JSON.parse(output) as {
+      issues: Array<{ code?: string }>;
+      report: { issues: Array<{ code?: string }> };
+    };
+
+    expect(parsed.issues.map((issue) => issue.code)).toContain("SCHEMA_VALIDATION_FAILED");
+    expect(parsed.issues.map((issue) => issue.code)).toContain("MCP_SHELL_COMMAND");
+    expect(parsed.issues).toHaveLength(5);
+    expect(parsed.report.issues).toHaveLength(parsed.issues.length);
+    expect(JSON.stringify(parsed.issues)).not.toContain(process.cwd());
+    expect(process.exitCode).toBeUndefined();
   });
 
   it("skips pull request comment posting when GitHub context is unavailable", async () => {

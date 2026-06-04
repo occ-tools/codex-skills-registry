@@ -132,6 +132,7 @@ export async function runCli(argv = process.argv) {
         .option("--max-findings <count>", "maximum findings to include in the comment", "10")
         .option("--report-path <path>", "report artifact path to include in the comment")
         .option("--sarif-path <path>", "SARIF artifact path to include in the comment")
+        .option("--strict", "treat selected audit warnings as errors")
         .option("--post", "create or update the GitHub pull request comment")
         .option("--comment-marker <marker>", "hidden marker used to update an existing PR comment")
         .action(async (options, command) => {
@@ -246,10 +247,13 @@ async function handleValidate(name, options, outputOptions = DEFAULT_OUTPUT_OPTI
         }
         else {
             if (filterContext.baselineDiagnostics.length > 0) {
-                console.log("Diagnostics:");
+                console.log("Baseline diagnostics:");
                 console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
             }
             if (diagnostics.activeIssues.length > 0) {
+                if (filterContext.baselineDiagnostics.length > 0) {
+                    console.log("");
+                }
                 console.log("Diagnostics:");
                 console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
             }
@@ -296,10 +300,13 @@ async function handleValidate(name, options, outputOptions = DEFAULT_OUTPUT_OPTI
     }
     else {
         if (filterContext.baselineDiagnostics.length > 0) {
-            console.log("Diagnostics:");
+            console.log("Baseline diagnostics:");
             console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
         }
         if (diagnostics.activeIssues.length > 0) {
+            if (filterContext.baselineDiagnostics.length > 0) {
+                console.log("");
+            }
             console.log("Diagnostics:");
             console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
         }
@@ -441,10 +448,13 @@ async function handleAudit(options, auditOptions = {}, outputOptions = DEFAULT_O
     }
     else {
         if (filterContext.baselineDiagnostics.length > 0) {
-            console.log("Diagnostics:");
+            console.log("Baseline diagnostics:");
             console.log(formatValidationIssues(filterContext.baselineDiagnostics, { cwd: options.cwd }));
         }
         if (diagnostics.activeIssues.length > 0) {
+            if (filterContext.baselineDiagnostics.length > 0) {
+                console.log("");
+            }
             console.log("Diagnostics:");
             console.log(formatValidationIssues(diagnostics.activeIssues, { cwd: options.cwd }));
         }
@@ -502,15 +512,38 @@ async function handlePrComment(options, commentOptions, outputOptions = DEFAULT_
     const registry = await SkillsRegistry.load(options);
     const filterContext = await createCliIssueFilterContext(options, registry);
     const index = registry.toIndex({ relativePaths: true });
-    const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
+    const validationResults = await registry.validateAllSkills();
+    const rawValidationIssues = [...validationResults.entries()].flatMap(([skillName, result]) => result.issues.map((issue) => ({
+        ...issue,
+        path: issue.path === skillName ? issue.path : `${skillName}.${issue.path}`,
+    })));
+    const filteredDiagnostics = filterCliIssues(registry.listDiagnostics(), options, registry, filterContext);
+    const validationFilter = filterCliIssues(rawValidationIssues, options, registry, filterContext);
+    const auditFilter = filterCliIssues(registry.audit({ strict: commentOptions.strict }), options, registry, filterContext);
+    const activeIssues = [
+        ...filterContext.baselineDiagnostics,
+        ...filteredDiagnostics.activeIssues,
+        ...validationFilter.activeIssues,
+        ...auditFilter.activeIssues,
+    ];
     const report = createRegistryReport({
         ...index,
-        diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
+        diagnostics: issuesForJson(activeIssues, options),
     });
+    const suppressedIssues = [
+        ...filteredDiagnostics.suppressedIssues,
+        ...validationFilter.suppressedIssues,
+        ...auditFilter.suppressedIssues,
+    ];
+    const baselineIssues = [
+        ...filteredDiagnostics.baselineIssues,
+        ...validationFilter.baselineIssues,
+        ...auditFilter.baselineIssues,
+    ];
     const comment = formatPullRequestComment(report, {
         maxFindings: parsePositiveInt(commentOptions.maxFindings, "max-findings"),
-        suppressedCount: filteredDiagnostics.suppressedIssues.length,
-        baselineCount: filteredDiagnostics.baselineIssues.length,
+        suppressedCount: suppressedIssues.length,
+        baselineCount: baselineIssues.length,
         reportPath: commentOptions.reportPath,
         sarifPath: commentOptions.sarifPath,
     });
@@ -520,8 +553,9 @@ async function handlePrComment(options, commentOptions, outputOptions = DEFAULT_
     const output = outputOptions.format === "json"
         ? `${JSON.stringify({
             report,
-            suppressedIssues: filteredDiagnostics.suppressedIssues,
-            baselineIssues: filteredDiagnostics.baselineIssues,
+            issues: issuesForJson(report.issues, options),
+            suppressedIssues: issuesForJson(suppressedIssues, options),
+            baselineIssues: issuesForJson(baselineIssues, options),
             ...(publishResult ? { publishResult } : {}),
         }, null, 2)}\n`
         : comment;

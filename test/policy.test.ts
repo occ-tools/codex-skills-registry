@@ -61,6 +61,20 @@ describe("policy", () => {
     expect(policy.failOnWarnings).toBe(true);
   });
 
+  it("rejects suppression expiration dates that are not real calendar dates", () => {
+    expect(() =>
+      resolveRegistryPolicy({
+        suppressions: [
+          {
+            code: "MCP_SHELL_COMMAND",
+            reason: "Temporary reviewed exception",
+            expiresOn: "2026-02-31",
+          },
+        ],
+      }),
+    ).toThrow("real calendar date");
+  });
+
   it("formats starter policy YAML", () => {
     const yaml = formatRegistryPolicyYaml({
       extends: ["recommended"],
@@ -83,6 +97,7 @@ describe("policy", () => {
     expect(yaml).toContain("deniedMcpCommands:");
     expect(yaml).toContain("baselineFile: codex-skills-baseline.json");
     expect(yaml).toContain("suppressions:");
+    expect(yaml).toContain('  - code: "MCP_SHELL_COMMAND"');
     expect(yaml).toContain("failOnWarnings: false");
   });
 });

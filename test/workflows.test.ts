@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -80,6 +80,42 @@ jobs:
     expect(issues.find((issue) => issue.code === "WORKFLOW_UNPINNED_ACTION")?.severity).toBe(
       "error",
     );
+  });
+
+  it("keeps the composite action wired to tested helper scripts", async () => {
+    const action = await readFile(path.join(process.cwd(), "action.yml"), "utf8");
+    const dollar = "$";
+
+    expect(action).toContain("[[ -f dist/cli.js && -f dist/action-summary.js ]]");
+    expect(action).toContain(
+      `text_args=("${dollar}{base_args[@]}" --format text --github-annotations)`,
+    );
+    expect(action).toContain(`write_issue_outputs pr-comment "${dollar}{strict_args[@]}"`);
+    expect(action).toContain('node dist/action-summary.js "$summary_file"');
+  });
+
+  it("keeps PR comments on trusted action code while scanning pull request contents", async () => {
+    const workflow = await readFile(
+      path.join(process.cwd(), ".github", "workflows", "registry-pr-comment.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("pull_request_target:");
+    expect(workflow).toContain("path: action");
+    expect(workflow).toContain("path: target");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain("uses: ./action");
+    expect(workflow).toContain("path: target");
+  });
+
+  it("uses the typed npm pack parser in the release workflow", async () => {
+    const workflow = await readFile(
+      path.join(process.cwd(), ".github", "workflows", "release.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("node dist/npm-pack-output.js npm-pack.json");
+    expect(workflow).not.toContain("node <<'NODE'");
   });
 });
 

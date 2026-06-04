@@ -41,11 +41,7 @@ jobs:
         shell: bash
         run: |
           npm pack --json > npm-pack.json
-          tarball="$(node <<'NODE'
-          const data = require("./npm-pack.json");
-          console.log(data[0].filename);
-          NODE
-          )"
+          tarball="$(node dist/npm-pack-output.js npm-pack.json)"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
       - name: Attest npm tarball provenance
         if: steps.published.outputs.exists != 'true'

@@ -101,7 +101,7 @@ runs:
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
-        if [[ -f dist/cli.js ]]; then
+        if [[ -f dist/cli.js && -f dist/action-summary.js ]]; then
           npm ci --omit=dev --ignore-scripts
         else
           npm ci --ignore-scripts
@@ -153,6 +153,7 @@ runs:
           base_args+=(--baseline "$REGISTRY_INPUT_BASELINE")
         fi
         args=("${base_args[@]}" --format "$REGISTRY_INPUT_FORMAT" --github-annotations)
+        text_args=("${base_args[@]}" --format text --github-annotations)
         summary_args=("${base_args[@]}" --format json)
 
         strict_args=()
@@ -172,29 +173,7 @@ runs:
             return 0
           fi
 
-          SUMMARY_FILE="$summary_file" node <<'NODE'
-        const fs = require("node:fs");
-        const data = JSON.parse(fs.readFileSync(process.env.SUMMARY_FILE, "utf8"));
-        const arrays = [
-          data.diagnostics,
-          data.validationIssues,
-          data.auditIssues,
-          data.issues,
-          Array.isArray(data.results) ? data.results.flatMap((result) => result.issues ?? []) : []
-        ].filter(Array.isArray);
-        const issues = arrays.flat();
-        const suppressed = data.suppressedIssues ?? [];
-        const baseline = data.baselineIssues ?? [];
-        const errors = issues.filter((issue) => issue.severity === "error").length;
-        const warnings = issues.filter((issue) => issue.severity === "warning").length;
-        fs.appendFileSync(process.env.GITHUB_OUTPUT, [
-          `issue-count=${issues.length}`,
-          `error-count=${errors}`,
-          `warning-count=${warnings}`,
-          `suppressed-count=${suppressed.length}`,
-          `baseline-count=${baseline.length}`
-        ].join("\n") + "\n");
-        NODE
+          node dist/action-summary.js "$summary_file"
         }
 
         run_sarif_or_text() {
@@ -238,7 +217,7 @@ runs:
             ;;
           report)
             out_file="$target_path/codex-skills-registry-report.md"
-            node dist/cli.js "${args[@]}" report --out codex-skills-registry-report.md
+            node dist/cli.js "${text_args[@]}" report --out codex-skills-registry-report.md
             echo "report-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           pr-comment)
@@ -247,9 +226,9 @@ runs:
             if [[ "$REGISTRY_INPUT_POST_COMMENT" == "true" ]]; then
               comment_args+=(--post)
             fi
-            node dist/cli.js "${args[@]}" pr-comment "${comment_args[@]}"
+            node dist/cli.js "${text_args[@]}" pr-comment "${strict_args[@]}" "${comment_args[@]}"
             echo "comment-path=$out_file" >> "$GITHUB_OUTPUT"
-            write_issue_outputs doctor "${strict_args[@]}"
+            write_issue_outputs pr-comment "${strict_args[@]}" --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif
             ;;
           baseline)
             out_file="$target_path/codex-skills-baseline.json"

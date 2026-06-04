@@ -83,11 +83,30 @@ describe("audit", () => {
         http_headers: {
           Authorization: "Bearer abc1234567890SECRET",
         },
-        bearer_token_env_var: "tok_1234567890abcdef",
+        bearer_token_env_var: "tok-1234567890abcdef",
       } as never,
     });
 
     expect(issues.filter((issue) => issue.code === "MCP_SECRET_LITERAL")).toHaveLength(2);
+  });
+
+  it("classifies non-portable variable references separately from secret literals", () => {
+    const issues = auditMcpServer({
+      name: "remote",
+      sourcePath: "config.toml",
+      config: {
+        url: "https://example.com/mcp",
+        enabled_tools: ["search"],
+        bearer_token_env_var: "mcp_token_v2",
+        env_http_headers: {
+          Authorization: "mcp_auth_header",
+        },
+      } as never,
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain("MCP_REMOTE_TOKEN_ENV_VAR_INVALID");
+    expect(issues.map((issue) => issue.code)).toContain("MCP_HEADER_ENV_VAR_INVALID");
+    expect(issues.map((issue) => issue.code)).not.toContain("MCP_SECRET_LITERAL");
   });
 
   it("flags remote MCP URL query secrets and invalid auth variable names", () => {

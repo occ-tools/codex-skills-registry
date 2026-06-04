@@ -315,7 +315,8 @@ export function auditMcpServer(server, options = {}) {
         }
         for (const [key, value] of Object.entries(headers)) {
             if ((looksLikeSecretKey(key) || key.toLowerCase() === "authorization") &&
-                looksLikeSecretLiteral(value)) {
+                looksLikeSecretLiteral(value) &&
+                !looksLikeEnvironmentVariableReference(value)) {
                 issues.push({
                     severity: "warning",
                     code: "MCP_SECRET_LITERAL",
@@ -341,29 +342,30 @@ export function auditMcpServer(server, options = {}) {
             }
         }
     }
-    if (typeof config.bearer_token_env_var === "string" &&
-        looksLikeSecretLiteral(config.bearer_token_env_var)) {
-        issues.push({
-            severity: "warning",
-            code: "MCP_SECRET_LITERAL",
-            path: `${basePath}.bearer_token_env_var`,
-            file: server.sourcePath,
-            line: server.fieldLines?.bearer_token_env_var ?? server.line,
-            message: "bearer_token_env_var should name an environment variable, not contain a token value.",
-            help: "Use a variable name such as MCP_TOKEN instead of pasting the token itself.",
-        });
-    }
-    else if (typeof config.bearer_token_env_var === "string" &&
-        !isEnvironmentVariableName(config.bearer_token_env_var)) {
-        issues.push({
-            severity: "warning",
-            code: "MCP_REMOTE_TOKEN_ENV_VAR_INVALID",
-            path: `${basePath}.bearer_token_env_var`,
-            file: server.sourcePath,
-            line: server.fieldLines?.bearer_token_env_var ?? server.line,
-            message: "bearer_token_env_var should be a portable environment variable name.",
-            help: "Use uppercase letters, numbers, and underscores, for example MCP_TOKEN.",
-        });
+    if (typeof config.bearer_token_env_var === "string") {
+        if (looksLikeSecretLiteral(config.bearer_token_env_var) &&
+            !looksLikeEnvironmentVariableReference(config.bearer_token_env_var)) {
+            issues.push({
+                severity: "warning",
+                code: "MCP_SECRET_LITERAL",
+                path: `${basePath}.bearer_token_env_var`,
+                file: server.sourcePath,
+                line: server.fieldLines?.bearer_token_env_var ?? server.line,
+                message: "bearer_token_env_var should name an environment variable, not contain a token value.",
+                help: "Use a variable name such as MCP_TOKEN instead of pasting the token itself.",
+            });
+        }
+        else if (!isEnvironmentVariableName(config.bearer_token_env_var)) {
+            issues.push({
+                severity: "warning",
+                code: "MCP_REMOTE_TOKEN_ENV_VAR_INVALID",
+                path: `${basePath}.bearer_token_env_var`,
+                file: server.sourcePath,
+                line: server.fieldLines?.bearer_token_env_var ?? server.line,
+                message: "bearer_token_env_var should be a portable environment variable name.",
+                help: "Use uppercase letters, numbers, and underscores, for example MCP_TOKEN.",
+            });
+        }
     }
     return issues;
 }
@@ -379,5 +381,8 @@ function looksLikeSecretLiteral(value) {
 }
 function isEnvironmentVariableName(value) {
     return /^[A-Z_][A-Z0-9_]*$/.test(value);
+}
+function looksLikeEnvironmentVariableReference(value) {
+    return typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 //# sourceMappingURL=audit.js.map
