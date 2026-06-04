@@ -37,8 +37,8 @@ release notes, dependency review, and security-oriented automation.
 - Stable issue codes, fix hints, policy allow/deny lists, suppressions, and
   baseline filtering for incremental adoption.
 - Policy presets, starter policy generation, PR changed-file filtering,
-  Markdown/HTML registry reports, static docs site generation, and pull request
-  comment generation or opt-in publishing.
+  Markdown/HTML registry reports, searchable static docs site generation, and
+  pull request comment generation or opt-in publishing.
 - Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
   source repositories.
 
@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.6.0
+      - uses: wangjiehu/codex-skills-registry@v0.6.1
         with:
           path: .
           command: doctor
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.6.0
+      - uses: wangjiehu/codex-skills-registry@v0.6.1
         with:
           path: .
           command: doctor
@@ -397,7 +397,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.6.0
+  uses: wangjiehu/codex-skills-registry@v0.6.1
   with:
     path: .
     command: schema
@@ -408,7 +408,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.6.0
+  uses: wangjiehu/codex-skills-registry@v0.6.1
   continue-on-error: true
   with:
     path: .
@@ -474,7 +474,7 @@ steps:
       ref: ${{ github.event.pull_request.head.sha }}
       path: target
       persist-credentials: false
-  - uses: wangjiehu/codex-skills-registry@v0.6.0
+  - uses: wangjiehu/codex-skills-registry@v0.6.1
     with:
       path: target
       command: pr-comment
@@ -486,6 +486,9 @@ To publish a static registry site for GitHub Pages or an artifact:
 ```bash
 codex-skills site --out site
 ```
+
+The generated Rules page includes local search, category filtering, and stable
+anchors for every issue code.
 
 The repository also includes workflows for registry artifacts, GitHub Pages
 site generation, PR comment publishing, CodeQL, dependency review, and OpenSSF
@@ -522,6 +525,9 @@ const result = await executeMockSkill(registry, "issue-triage", {
 });
 ```
 
+For the recommended public SDK surface and compatibility notes, see
+[`docs/sdk-contract.md`](docs/sdk-contract.md).
+
 ## Development
 
 ```bash
@@ -556,7 +562,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.6.0` is pushed.
+Automated releases run when a semver tag such as `v0.6.1` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

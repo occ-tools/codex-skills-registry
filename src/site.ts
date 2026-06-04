@@ -125,24 +125,73 @@ function formatOverview(input: RegistrySiteInput): string {
 }
 
 function formatRules(rules: RegistryRuleExplanation[]): string {
+  const categories = [...new Set(rules.map((rule) => ruleCategory(rule.code)))].sort();
+
   return `
 <section class="hero compact">
   <p class="eyebrow">Rules catalog</p>
   <h1>Registry Rules</h1>
   <p>Stable issue codes, what they mean, and how maintainers should resolve them.</p>
 </section>
-<section class="rules">
+<section class="rule-tools" aria-labelledby="rules-filter-heading">
+  <h2 id="rules-filter-heading">Find Rules</h2>
+  <div class="filters">
+    <label for="rules-search">Search</label>
+    <input id="rules-search" type="search" autocomplete="off" placeholder="Issue code, title, or fix">
+    <label for="rules-category">Category</label>
+    <select id="rules-category">
+      <option value="">All categories</option>
+      ${categories
+        .map(
+          (category) =>
+            `<option value="${escapeAttributeValue(category)}">${escapeHtml(category)}</option>`,
+        )
+        .join("")}
+    </select>
+  </div>
+  <p class="rule-count"><span id="rules-visible-count">${rules.length}</span> of ${rules.length} rules</p>
+</section>
+<section class="rules" id="rules-list">
   ${rules
     .map(
       (rule) => `
-    <article class="rule" id="${escapeAttribute(rule.code)}">
+    <article class="rule" id="${escapeAttribute(rule.code)}" data-rule-card data-category="${escapeAttributeValue(ruleCategory(rule.code))}" data-rule-text="${escapeAttributeValue(ruleSearchText(rule))}">
       <h2><code>${escapeHtml(rule.code)}</code> ${escapeHtml(rule.title)}</h2>
       <p>${escapeHtml(rule.description)}</p>
       <p><strong>Fix:</strong> ${escapeHtml(rule.remediation)}</p>
     </article>`,
     )
     .join("")}
-</section>`;
+</section>
+<p class="empty-state" id="rules-empty" hidden>No matching rules.</p>
+<script>
+(() => {
+  const search = document.getElementById("rules-search");
+  const category = document.getElementById("rules-category");
+  const count = document.getElementById("rules-visible-count");
+  const empty = document.getElementById("rules-empty");
+  const cards = Array.from(document.querySelectorAll("[data-rule-card]"));
+  const update = () => {
+    const query = search.value.trim().toLowerCase();
+    const selectedCategory = category.value;
+    let visible = 0;
+    for (const card of cards) {
+      const matchesQuery = !query || card.dataset.ruleText.includes(query);
+      const matchesCategory = !selectedCategory || card.dataset.category === selectedCategory;
+      const show = matchesQuery && matchesCategory;
+      card.hidden = !show;
+      if (show) {
+        visible += 1;
+      }
+    }
+    count.textContent = String(visible);
+    empty.hidden = visible !== 0;
+  };
+  search.addEventListener("input", update);
+  category.addEventListener("change", update);
+  update();
+})();
+</script>`;
 }
 
 function formatPolicy(): string {
@@ -210,12 +259,18 @@ function formatSitePage(options: {
     .metric.warn strong { color: var(--warn); }
     .split { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     .list-block, .rule { border-top: 1px solid var(--line); padding-top: 12px; }
+    .rule-tools { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 24px 0; padding: 16px; }
+    .rule-tools h2 { margin-top: 0; }
+    .filters { align-items: end; display: grid; gap: 10px 12px; grid-template-columns: auto minmax(180px, 1fr) auto minmax(160px, 220px); }
+    input, select { border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit; min-height: 40px; padding: 8px 10px; width: 100%; }
+    .rule-count, .empty-state { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
+    [hidden] { display: none !important; }
     ul { margin: 8px 0 0; padding-left: 20px; }
     li { margin: 6px 0; }
     .finding.error { color: var(--danger); }
     .finding.warning { color: var(--warn); }
     .timestamp { color: var(--muted); font-size: 13px; margin-top: 40px; }
-    @media (max-width: 640px) { nav { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 16px; padding-top: 16px; } .brand { margin-right: 0; } }
+    @media (max-width: 640px) { nav { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 16px; padding-top: 16px; } .brand { margin-right: 0; } .filters { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -278,4 +333,16 @@ function escapeHtml(value: string): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value).replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+function escapeAttributeValue(value: string): string {
+  return escapeHtml(value);
+}
+
+function ruleCategory(code: string): string {
+  return code.split("_")[0] ?? "REGISTRY";
+}
+
+function ruleSearchText(rule: RegistryRuleExplanation): string {
+  return [rule.code, rule.title, rule.description, rule.remediation].join(" ").toLowerCase();
 }

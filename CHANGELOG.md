@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+- Add local search, category filtering, result counts, and empty-state feedback to the generated Rules page.
+- Add an SDK contract document that separates recommended public exports from compatibility helpers.
+- Document the searchable rules catalog and SDK contract in README and launch planning docs.
+
 ## 0.6.0
 
 - Make issue baselines stable across finding message rewording while preserving compatibility with existing baseline files.
