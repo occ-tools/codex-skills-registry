@@ -32,7 +32,7 @@ The core message:
 - SARIF output example from the risky demo.
 - GitHub Action YAML examples for doctor, schema, report, PR comment publishing, baseline, site, and SARIF upload.
 - Security model and threat list in `SECURITY.md`.
-- Public demo repository with clean and risky pull request examples.
+- Public demo repository with clean, risky, baseline, and fork-comment workflow examples.
 - GitHub Pages site generated from the live registry report, including a searchable rules catalog.
 
 ## Near-Term Roadmap

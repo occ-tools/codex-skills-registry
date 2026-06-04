@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.6.1
+      - uses: wangjiehu/codex-skills-registry@v0.6.2
         with:
           path: .
           command: doctor
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.6.1
+      - uses: wangjiehu/codex-skills-registry@v0.6.2
         with:
           path: .
           command: doctor
@@ -397,7 +397,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.6.1
+  uses: wangjiehu/codex-skills-registry@v0.6.2
   with:
     path: .
     command: schema
@@ -408,7 +408,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.6.1
+  uses: wangjiehu/codex-skills-registry@v0.6.2
   continue-on-error: true
   with:
     path: .
@@ -455,9 +455,13 @@ codex-skills pr-comment \
 ```
 
 To let the Action create or update the PR comment directly, grant the caller
-workflow the narrow PR write permission and enable `post-comment`. For public
-repositories, use trusted workflow/action code and scan the pull request
-contents in a separate checkout:
+workflow the narrow PR write permission and enable `post-comment`.
+
+For public repositories, keep required validation on `pull_request` and isolate
+write-token comment publishing in a narrow `pull_request_target` workflow. The
+target workflow should run trusted action code only, checkout pull request
+contents into a separate path with `persist-credentials: false`, and avoid
+running scripts from the pull request contents:
 
 ```yaml
 on:
@@ -474,7 +478,7 @@ steps:
       ref: ${{ github.event.pull_request.head.sha }}
       path: target
       persist-credentials: false
-  - uses: wangjiehu/codex-skills-registry@v0.6.1
+  - uses: wangjiehu/codex-skills-registry@v0.6.2
     with:
       path: target
       command: pr-comment
@@ -506,7 +510,11 @@ node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
 The standalone demo repository is
 [`wangjiehu/codex-skills-registry-demo`](https://github.com/wangjiehu/codex-skills-registry-demo).
 It contains a clean default branch plus intentionally risky and baseline
-adoption pull requests for public CI screenshots and reviewer walkthroughs.
+adoption pull requests for public CI screenshots and reviewer walkthroughs. It
+also includes a fork-comment workflow pattern so maintainers can test same-repo
+PR comments separately from fork-safe `pull_request_target` comment publishing.
+For the fork validation matrix, see
+[`docs/fork-pr-validation.md`](docs/fork-pr-validation.md).
 
 For product planning and launch assets, see `docs/go-to-market.md` and
 `docs/v1-readiness-checklist.md`.
@@ -562,7 +570,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.6.1` is pushed.
+Automated releases run when a semver tag such as `v0.6.2` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

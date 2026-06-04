@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2
+
+- Document a fork-safe pull request comment adoption path with a dedicated validation matrix.
+- Clarify that public fork PR comments should split required validation from write-token comment publishing.
+- Point launch and demo guidance at clean, risky, baseline, and fork-comment workflows.
+
 ## 0.6.1
 
 - Add local search, category filtering, result counts, and empty-state feedback to the generated Rules page.
