@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Fix composite Action manifest YAML parsing for the `post-comment` input description.
+
 ## 0.5.0
 
 - Add GitHub Actions workflow discovery to registry indexes, reports, PR comments, and audit output.

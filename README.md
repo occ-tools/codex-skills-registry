@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.5.0
+      - uses: wangjiehu/codex-skills-registry@v0.5.1
         with:
           path: .
           command: doctor
@@ -368,7 +368,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.5.0
+      - uses: wangjiehu/codex-skills-registry@v0.5.1
         with:
           path: .
           command: doctor
@@ -392,7 +392,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.5.0
+  uses: wangjiehu/codex-skills-registry@v0.5.1
   with:
     path: .
     command: schema
@@ -403,7 +403,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.5.0
+  uses: wangjiehu/codex-skills-registry@v0.5.1
   continue-on-error: true
   with:
     path: .
@@ -459,7 +459,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v6
-  - uses: wangjiehu/codex-skills-registry@v0.5.0
+  - uses: wangjiehu/codex-skills-registry@v0.5.1
     with:
       path: .
       command: pr-comment
@@ -541,7 +541,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.5.0` is pushed.
+Automated releases run when a semver tag such as `v0.5.1` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

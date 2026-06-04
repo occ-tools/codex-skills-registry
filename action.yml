@@ -47,7 +47,7 @@ inputs:
     required: false
     default: ""
   post-comment:
-    description: When command is pr-comment, create or update a pull request comment using github.token. Requires pull-requests: write on the caller workflow.
+    description: "When command is pr-comment, create or update a pull request comment using github.token. Requires pull-requests: write on the caller workflow."
     required: false
     default: "false"
   comment-marker:
