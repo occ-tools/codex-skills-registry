@@ -4,7 +4,12 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { zodErrorToIssues } from "./schema.js";
 import { firstExistingPath } from "./utils.js";
-export const RegistryPolicyPresetSchema = z.enum(["recommended", "strict-mcp", "plugin-review"]);
+export const RegistryPolicyPresetSchema = z.enum([
+    "recommended",
+    "strict-mcp",
+    "plugin-review",
+    "strict-supply-chain",
+]);
 const PolicyExtendsSchema = z
     .union([RegistryPolicyPresetSchema, z.array(RegistryPolicyPresetSchema).min(1)])
     .optional();
@@ -32,6 +37,7 @@ export const RegistryPolicyInputSchema = z
     .object({
     extends: PolicyExtendsSchema,
     requirePinnedMcpPackages: z.boolean().optional(),
+    requirePinnedWorkflowActions: z.boolean().optional(),
     allowedSkills: z.array(z.string().min(1)).optional(),
     deniedSkills: z.array(z.string().min(1)).optional(),
     allowedPlugins: z.array(z.string().min(1)).optional(),
@@ -52,6 +58,7 @@ export const RegistryPolicyInputSchema = z
 export const RegistryPolicySchema = RegistryPolicyInputSchema.omit({ extends: true })
     .extend({
     requirePinnedMcpPackages: z.boolean().default(false),
+    requirePinnedWorkflowActions: z.boolean().default(false),
     requireExplicitMcpToolPolicy: z.boolean().default(false),
     requirePluginSkillPaths: z.boolean().default(false),
     failOnWarnings: z.boolean().default(false),
@@ -76,6 +83,13 @@ export const REGISTRY_POLICY_PRESETS = {
         requirePluginSkillPaths: true,
         requireExplicitMcpToolPolicy: true,
         failOnWarnings: false,
+    },
+    "strict-supply-chain": {
+        requirePinnedMcpPackages: true,
+        requirePinnedWorkflowActions: true,
+        requireExplicitMcpToolPolicy: true,
+        requirePluginSkillPaths: true,
+        failOnWarnings: true,
     },
 };
 const POLICY_FILENAMES = [
@@ -171,6 +185,7 @@ export function formatRegistryPolicyYaml(policy) {
         }
     }
     appendBooleanPolicyLine(lines, "requirePinnedMcpPackages", policy.requirePinnedMcpPackages);
+    appendBooleanPolicyLine(lines, "requirePinnedWorkflowActions", policy.requirePinnedWorkflowActions);
     appendStringListPolicyLines(lines, "allowedSkills", policy.allowedSkills);
     appendStringListPolicyLines(lines, "deniedSkills", policy.deniedSkills);
     appendStringListPolicyLines(lines, "allowedPlugins", policy.allowedPlugins);

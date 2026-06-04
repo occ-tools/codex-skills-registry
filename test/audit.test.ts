@@ -90,6 +90,25 @@ describe("audit", () => {
     expect(issues.filter((issue) => issue.code === "MCP_SECRET_LITERAL")).toHaveLength(2);
   });
 
+  it("flags remote MCP URL query secrets and invalid auth variable names", () => {
+    const issues = auditMcpServer({
+      name: "remote",
+      sourcePath: "config.toml",
+      config: {
+        url: "https://example.com/mcp?token=abc1234567890SECRET",
+        enabled_tools: ["search"],
+        bearer_token_env_var: "token-name",
+        env_http_headers: {
+          Authorization: "bad-name",
+        },
+      } as never,
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain("MCP_REMOTE_URL_SECRET");
+    expect(issues.map((issue) => issue.code)).toContain("MCP_REMOTE_TOKEN_ENV_VAR_INVALID");
+    expect(issues.map((issue) => issue.code)).toContain("MCP_HEADER_ENV_VAR_INVALID");
+  });
+
   it("applies MCP deny-list policy checks", () => {
     const issues = auditMcpServer(
       {
@@ -105,6 +124,7 @@ describe("audit", () => {
           deniedMcpServers: ["blocked"],
           deniedMcpCommands: ["bash"],
           requirePinnedMcpPackages: false,
+          requirePinnedWorkflowActions: false,
           requireExplicitMcpToolPolicy: false,
           requirePluginSkillPaths: false,
           failOnWarnings: false,

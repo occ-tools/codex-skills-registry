@@ -20,6 +20,16 @@ describe("report", () => {
         },
       ],
       plugins: [],
+      workflows: [
+        {
+          name: "validate",
+          sourcePath: ".github/workflows/validate.yml",
+          triggers: { pull_request: {} },
+          jobs: [{ id: "test" }],
+          uses: [],
+          runs: [],
+        },
+      ],
       diagnostics: [
         {
           severity: "error",
@@ -31,13 +41,16 @@ describe("report", () => {
       ],
       policy: {
         requirePinnedMcpPackages: false,
+        requirePinnedWorkflowActions: false,
         requireExplicitMcpToolPolicy: false,
         requirePluginSkillPaths: false,
         failOnWarnings: false,
+        suppressions: [],
       },
     });
 
     expect(report.summary.errors).toBe(1);
+    expect(report.summary.workflows).toBe(1);
     expect(report.mcpServers[0]?.transport).toBe("stdio");
     expect(report.nextActions).toContain(
       "Fix error-level findings before trusting the automation.",
@@ -50,12 +63,14 @@ describe("report", () => {
         skills: 0,
         mcpServers: 0,
         plugins: 0,
+        workflows: 0,
         errors: 0,
         warnings: 0,
       },
       skills: [],
       mcpServers: [],
       plugins: [],
+      workflows: [],
       issues: [],
       nextActions: [],
     });
@@ -70,12 +85,14 @@ describe("report", () => {
         skills: 0,
         mcpServers: 0,
         plugins: 0,
+        workflows: 0,
         errors: 0,
         warnings: 0,
       },
       skills: [],
       mcpServers: [],
       plugins: [],
+      workflows: [],
       issues: [],
       nextActions: [],
     });

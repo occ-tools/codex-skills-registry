@@ -22,7 +22,7 @@ The core message:
 2. Add `.codex-skills-registry.yaml` with `init-policy`.
 3. Add the GitHub Action with `command: doctor`.
 4. Generate a baseline if the repository already has known findings.
-5. Upload SARIF, publish the Markdown or HTML report, or generate a PR comment body.
+5. Upload SARIF, publish the Markdown/HTML report or static site, or post the PR comment directly.
 6. Use `--changed-files`, suppressions, and policy allow/deny lists to reduce noise.
 
 ## Launch Assets
@@ -30,15 +30,16 @@ The core message:
 - README quick start.
 - `demo/clean-project` and `demo/risky-project`.
 - SARIF output example from the risky demo.
-- GitHub Action YAML examples for doctor, schema, report, PR comment, baseline, and SARIF upload.
+- GitHub Action YAML examples for doctor, schema, report, PR comment publishing, baseline, site, and SARIF upload.
 - Security model and threat list in `SECURITY.md`.
+- Public demo repository with clean and risky pull request examples.
+- GitHub Pages site generated from the live registry report.
 
 ## Near-Term Roadmap
 
-- Add a standalone public demo repository with clean and risky pull requests.
-- Add a generated docs page from `codex-skills report`.
-- Add screenshots or short GIFs of annotations, SARIF, reports, and PR comments.
+- Capture screenshots or short GIFs of annotations, SARIF, reports, Pages, and PR comments after demo runs complete.
 - Add a short launch article with screenshots and adoption steps.
+- Add integration examples for repositories that already run CodeQL and dependency review.
 
 ## Success Criteria
 
@@ -47,5 +48,6 @@ The core message:
 - Reports and SARIF are usable as CI artifacts without local path leakage.
 - Baselines allow existing repositories to adopt without blocking on old risk.
 - PR comment output gives reviewers a compact summary without reading raw logs.
+- PR comment publishing uses narrow permissions and degrades to a warning when GitHub context cannot write.
 - The tool never executes community skill scripts by default.
 - The package, Action, demos, and docs all describe the same product boundary.

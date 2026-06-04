@@ -14,6 +14,7 @@ export function createRegistryReport(index) {
             skills: index.skills.length,
             mcpServers: index.mcpServers.length,
             plugins: index.plugins.length,
+            workflows: index.workflows.length,
             errors,
             warnings,
         },
@@ -31,6 +32,12 @@ export function createRegistryReport(index) {
         plugins: index.plugins.map((plugin) => ({
             name: plugin.manifest.name,
             sourcePath: plugin.sourcePath,
+        })),
+        workflows: index.workflows.map((workflow) => ({
+            name: workflow.name,
+            sourcePath: workflow.sourcePath,
+            jobs: workflow.jobs.length,
+            actions: workflow.uses.length,
         })),
         issues,
         nextActions: nextActionsForIssues(issues),
@@ -52,6 +59,7 @@ export function formatRegistryReportMarkdown(report) {
         `- Skills: ${report.summary.skills}`,
         `- MCP servers: ${report.summary.mcpServers}`,
         `- Plugins: ${report.summary.plugins}`,
+        `- Workflows: ${report.summary.workflows}`,
         `- Errors: ${report.summary.errors}`,
         `- Warnings: ${report.summary.warnings}`,
         "",
@@ -66,6 +74,10 @@ export function formatRegistryReportMarkdown(report) {
         "## Plugins",
         "",
         ...formatPluginRows(report.plugins),
+        "",
+        "## Workflows",
+        "",
+        ...formatWorkflowRows(report.workflows),
         "",
         "## Findings",
         "",
@@ -90,6 +102,9 @@ export function formatRegistryReportHtml(report) {
     const plugins = report.plugins.length === 0
         ? "<p>No plugin manifests discovered.</p>"
         : `<ul>${report.plugins.map((plugin) => `<li><strong>${escapeHtml(plugin.name)}</strong> - ${escapeHtml(plugin.sourcePath)}</li>`).join("")}</ul>`;
+    const workflows = report.workflows.length === 0
+        ? "<p>No GitHub Actions workflows discovered.</p>"
+        : `<ul>${report.workflows.map((workflow) => `<li><strong>${escapeHtml(workflow.name)}</strong> - ${escapeHtml(workflow.sourcePath)} (${workflow.jobs} job${workflow.jobs === 1 ? "" : "s"}, ${workflow.actions} action reference${workflow.actions === 1 ? "" : "s"})</li>`).join("")}</ul>`;
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -115,6 +130,7 @@ export function formatRegistryReportHtml(report) {
         <tr><th>Skills</th><td>${report.summary.skills}</td></tr>
         <tr><th>MCP servers</th><td>${report.summary.mcpServers}</td></tr>
         <tr><th>Plugins</th><td>${report.summary.plugins}</td></tr>
+        <tr><th>Workflows</th><td>${report.summary.workflows}</td></tr>
         <tr><th>Errors</th><td>${report.summary.errors}</td></tr>
         <tr><th>Warnings</th><td>${report.summary.warnings}</td></tr>
       </tbody>
@@ -125,6 +141,8 @@ export function formatRegistryReportHtml(report) {
     ${mcpServers}
     <h2>Plugins</h2>
     ${plugins}
+    <h2>Workflows</h2>
+    ${workflows}
     <h2>Findings</h2>
     ${findings}
   </main>
@@ -149,6 +167,12 @@ function formatPluginRows(reportPlugins) {
         return ["No plugin manifests discovered."];
     }
     return reportPlugins.map((plugin) => `- ${plugin.name} - ${plugin.sourcePath}`);
+}
+function formatWorkflowRows(reportWorkflows) {
+    if (reportWorkflows.length === 0) {
+        return ["No GitHub Actions workflows discovered."];
+    }
+    return reportWorkflows.map((workflow) => `- ${workflow.name} - ${workflow.sourcePath} (${workflow.jobs} job${workflow.jobs === 1 ? "" : "s"}, ${workflow.actions} action reference${workflow.actions === 1 ? "" : "s"})`);
 }
 function formatIssueRows(issues) {
     if (issues.length === 0) {
@@ -182,6 +206,9 @@ function nextActionsForIssues(issues) {
     }
     if (issues.some((issue) => issue.path.includes("plugin"))) {
         actions.add("Review plugin paths and bundled skill references.");
+    }
+    if (issues.some((issue) => issue.path.includes("workflows"))) {
+        actions.add("Review GitHub Actions permissions, triggers, and pinned action references.");
     }
     return [...actions];
 }

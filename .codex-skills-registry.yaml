@@ -1,4 +1,5 @@
 requirePinnedMcpPackages: true
+requirePinnedWorkflowActions: true
 allowedMcpCommands:
   - node
   - python

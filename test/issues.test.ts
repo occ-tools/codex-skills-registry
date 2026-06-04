@@ -5,6 +5,7 @@ import type { ValidationIssue } from "../src/schema.js";
 
 const basePolicy: RegistryPolicy = {
   requirePinnedMcpPackages: false,
+  requirePinnedWorkflowActions: false,
   requireExplicitMcpToolPolicy: false,
   requirePluginSkillPaths: false,
   failOnWarnings: false,

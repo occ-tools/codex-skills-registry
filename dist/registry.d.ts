@@ -2,6 +2,7 @@ import { type AuditOptions } from "./audit.js";
 import { type DiscoverOptions, type DiscoveredMcpServer, type DiscoveredPlugin, type DiscoveryDiagnostic } from "./discovery.js";
 import { type RegistryPolicy } from "./policy.js";
 import { type CodexSkill, type ValidationIssue, type ValidationResult } from "./schema.js";
+import { type DiscoveredWorkflow } from "./workflows.js";
 export interface RegistryLoadOptions extends DiscoverOptions {
     configFile?: string;
     policyFile?: string;
@@ -11,6 +12,7 @@ export interface RegistryIndex {
     skills: CodexSkill[];
     mcpServers: DiscoveredMcpServer[];
     plugins: DiscoveredPlugin[];
+    workflows: DiscoveredWorkflow[];
     diagnostics: DiscoveryDiagnostic[];
     policy: RegistryPolicy;
 }
@@ -30,6 +32,7 @@ export declare class SkillsRegistry {
     private readonly skills;
     private readonly mcpServers;
     private readonly plugins;
+    private readonly workflows;
     private readonly diagnostics;
     private policy;
     private policyPath?;
@@ -101,6 +104,12 @@ export declare class SkillsRegistry {
      * @returns Plugin entries.
      */
     listPlugins(): DiscoveredPlugin[];
+    /**
+     * Lists discovered GitHub Actions workflow files.
+     *
+     * @returns Workflow entries.
+     */
+    listWorkflows(): DiscoveredWorkflow[];
     /**
      * Returns discovery and registry diagnostics collected during loading.
      *

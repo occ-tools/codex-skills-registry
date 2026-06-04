@@ -2,12 +2,14 @@
 
 [![Validate](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/validate.yml/badge.svg)](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/validate.yml)
 [![CodeQL](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/codeql.yml/badge.svg)](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/scorecard.yml/badge.svg)](https://github.com/wangjiehu/codex-skills-registry/actions/workflows/scorecard.yml)
 [![npm](https://img.shields.io/npm/v/%40wangjiehu%2Fcodex-skills-registry.svg)](https://www.npmjs.com/package/@wangjiehu/codex-skills-registry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 `codex-skills-registry` is a small TypeScript CLI and SDK for open-source
 maintainers who want to validate, index, and safely test Codex Skills, plugin
-manifests, and MCP server configuration before they become part of a repository.
+manifests, MCP server configuration, and GitHub Actions workflows before they
+become trusted repository automation.
 
 This is an unofficial community project and is not affiliated with or endorsed
 by OpenAI.
@@ -17,12 +19,13 @@ release notes, dependency review, and security-oriented automation.
 
 ## Highlights
 
-- Codex-oriented registry for Skills, plugin manifests, and MCP server config.
+- Codex-oriented registry for Skills, plugin manifests, MCP server config, and
+  GitHub Actions workflows.
 - CI-friendly validation for `SKILL.md` frontmatter, plugin paths, and project
   policy.
 - Safety audit rules for risky entry points, shell-based MCP servers, unpinned
-  packages, broad tool exposure, insecure remote MCP hosts, and potential
-  secret literals.
+  packages, broad tool exposure, insecure remote MCP hosts, potential secret
+  literals, workflow token permissions, risky triggers, and unpinned actions.
 - Safe mock execution for issue, pull request, release, dependency, security,
   and manual maintainer workflows.
 - JSON, SARIF, and GitHub Actions annotation output for automation and code
@@ -34,14 +37,15 @@ release notes, dependency review, and security-oriented automation.
 - Stable issue codes, fix hints, policy allow/deny lists, suppressions, and
   baseline filtering for incremental adoption.
 - Policy presets, starter policy generation, PR changed-file filtering,
-  Markdown/HTML registry reports, and pull request comment generation.
+  Markdown/HTML registry reports, static docs site generation, and pull request
+  comment generation or opt-in publishing.
 - Reusable GitHub Action plus published npm CLI/SDK for adoption in other open
   source repositories.
 
 ## Status
 
-Version 0.4 validates, indexes, audits, exports schemas for, reports on, and mock-runs
-workflow definitions. It does not execute arbitrary skill scripts.
+Version 0.5 validates, indexes, audits, exports schemas for, reports on, and
+mock-runs workflow definitions. It does not execute arbitrary skill scripts.
 
 ## Why this exists
 
@@ -56,6 +60,8 @@ This registry gives maintainers a CI-friendly surface:
 - parse and validate `SKILL.md` frontmatter
 - inspect `.codex/config.toml` MCP server definitions
 - index plugin manifests
+- inspect `.github/workflows/*.yml` token permissions, action references, and
+  high-risk triggers
 - mock-run a skill against issue, PR, or release events without executing
   arbitrary code
 - audit MCP and skill definitions for review-worthy safety risks
@@ -91,6 +97,7 @@ node dist/cli.js validate issue-triage
 node dist/cli.js run issue-triage --trigger issue
 node dist/cli.js doctor
 node dist/cli.js pr-comment
+node dist/cli.js site --out site
 node dist/cli.js explain MCP_UNPINNED_NPX
 node dist/cli.js schema --out codex-skills-registry.schema.json
 ```
@@ -115,6 +122,7 @@ codex-skills export --out registry-index.json
 codex-skills report --out codex-skills-report.md
 codex-skills report --html --out codex-skills-report.html
 codex-skills pr-comment --out codex-skills-pr-comment.md
+codex-skills site --out site
 codex-skills baseline --out codex-skills-baseline.json
 codex-skills explain MCP_UNPINNED_NPX
 codex-skills schema --out codex-skills-registry.schema.json
@@ -134,19 +142,22 @@ codex-skills doctor --github-annotations
 ## Project layout
 
 ```text
-src/schema.ts      Zod schemas for skills, MCP servers, and plugin manifests
-src/discovery.ts   Filesystem discovery for .agents/skills and .codex/config.toml
-src/registry.ts    In-memory registry, validation, and JSON export
-src/policy.ts      Project policy loading for .codex-skills-registry.yaml
-src/issues.ts      Stable issue codes, fingerprints, baselines, suppressions
-src/audit.ts       Safety checks for review-worthy MCP and skill risks
-src/sarif.ts       SARIF conversion for Code Scanning integrations
-src/json-schema.ts JSON Schema export for editor and CI integrations
-src/pr-comment.ts  Pull request comment formatting
-src/executor.ts    Safe mock executor
-src/cli.ts         Commander-based CLI
-examples/          Example maintainer workflows and MCP config
-test/              Vitest coverage for schemas, discovery, and registry behavior
+src/schema.ts         Zod schemas for skills, MCP servers, and plugin manifests
+src/discovery.ts      Filesystem discovery for .agents/skills and .codex/config.toml
+src/workflows.ts      GitHub Actions workflow discovery and audit rules
+src/registry.ts       In-memory registry, validation, and JSON export
+src/policy.ts         Project policy loading for .codex-skills-registry.yaml
+src/issues.ts         Stable issue codes, fingerprints, baselines, suppressions
+src/audit.ts          Safety checks for review-worthy registry risks
+src/sarif.ts          SARIF conversion for Code Scanning integrations
+src/json-schema.ts    JSON Schema export for editor and CI integrations
+src/pr-comment.ts     Pull request comment formatting
+src/github-comment.ts Opt-in GitHub PR comment publishing
+src/site.ts           Static docs site generation
+src/executor.ts       Safe mock executor
+src/cli.ts            Commander-based CLI
+examples/             Example maintainer workflows and MCP config
+test/                 Vitest coverage for schemas, discovery, and registry behavior
 ```
 
 ## Codex compatibility
@@ -204,6 +215,12 @@ The audit command highlights patterns that deserve maintainer review:
 - broad tool approval policies
 - potential secret literals in MCP environment values, HTTP headers, and bearer
   token configuration
+- MCP remote URL query credentials and non-portable auth environment variable
+  names
+- GitHub Actions workflows without explicit permissions
+- broad workflow token permissions and `pull_request_target`
+- unpinned workflow actions when policy requires full SHA pinning
+- downloaded script execution pipelines in workflow `run` steps
 
 ## What it does not do
 
@@ -221,6 +238,7 @@ Maintainers can add `.codex-skills-registry.yaml` to make CI stricter:
 extends:
   - recommended
 requirePinnedMcpPackages: true
+requirePinnedWorkflowActions: false
 allowedMcpCommands:
   - node
   - python
@@ -254,7 +272,8 @@ Use `init-policy` to write a starter policy:
 codex-skills init-policy --preset recommended --out .codex-skills-registry.yaml
 ```
 
-Supported presets are `recommended`, `strict-mcp`, and `plugin-review`.
+Supported presets are `recommended`, `strict-mcp`, `plugin-review`, and
+`strict-supply-chain`.
 
 Use `baseline` when a repository already has known findings and you only want
 CI to block newly introduced risks:
@@ -269,6 +288,7 @@ Every finding has a stable issue code and a deterministic fingerprint. Use
 
 ```bash
 codex-skills explain MCP_UNPINNED_NPX
+codex-skills explain WORKFLOW_UNPINNED_ACTION
 ```
 
 ## JSON Schema export
@@ -323,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.4.0
+      - uses: wangjiehu/codex-skills-registry@v0.5.0
         with:
           path: .
           command: doctor
@@ -348,7 +368,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v0.4.0
+      - uses: wangjiehu/codex-skills-registry@v0.5.0
         with:
           path: .
           command: doctor
@@ -358,13 +378,13 @@ jobs:
 ```
 
 Supported action commands are `doctor`, `validate`, `list`, `audit`, `export`,
-`report`, `schema`, `pr-comment`, and `baseline`. The action emits GitHub
-annotations for diagnostics, validation issues, and audit findings.
+`report`, `schema`, `pr-comment`, `baseline`, and `site`. The action emits
+GitHub annotations for diagnostics, validation issues, and audit findings.
 
 Action outputs include artifact paths plus active issue counts:
 
 - `index-path`, `sarif-path`, `schema-path`, `report-path`, `comment-path`,
-  `baseline-path`
+  `baseline-path`, `site-path`
 - `issue-count`, `error-count`, `warning-count`, `suppressed-count`,
   `baseline-count`
 
@@ -372,7 +392,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@v0.4.0
+  uses: wangjiehu/codex-skills-registry@v0.5.0
   with:
     path: .
     command: schema
@@ -383,7 +403,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v0.4.0
+  uses: wangjiehu/codex-skills-registry@v0.5.0
   continue-on-error: true
   with:
     path: .
@@ -429,9 +449,32 @@ codex-skills pr-comment \
   --sarif-path codex-skills-registry.sarif
 ```
 
-The repository also includes a `registry-artifacts` workflow that exports the
-JSON index, Markdown report, and JSON Schema catalog as GitHub Actions
-artifacts.
+To let the Action create or update the PR comment directly, grant the caller
+workflow the narrow PR write permission and enable `post-comment`:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+
+steps:
+  - uses: actions/checkout@v6
+  - uses: wangjiehu/codex-skills-registry@v0.5.0
+    with:
+      path: .
+      command: pr-comment
+      post-comment: "true"
+```
+
+To publish a static registry site for GitHub Pages or an artifact:
+
+```bash
+codex-skills site --out site
+```
+
+The repository also includes workflows for registry artifacts, GitHub Pages
+site generation, PR comment publishing, CodeQL, dependency review, and OpenSSF
+Scorecard.
 
 ## Demo projects
 
@@ -441,6 +484,11 @@ The `demo/` directory includes a clean project and a risky project:
 node dist/cli.js --cwd demo/clean-project --no-examples doctor
 node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
 ```
+
+The standalone demo repository is
+[`wangjiehu/codex-skills-registry-demo`](https://github.com/wangjiehu/codex-skills-registry-demo).
+It contains a clean default branch plus intentionally risky and baseline
+adoption pull requests for public CI screenshots and reviewer walkthroughs.
 
 For product planning and launch assets, see `docs/go-to-market.md` and
 `docs/v1-readiness-checklist.md`.
@@ -493,7 +541,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.4.0` is pushed.
+Automated releases run when a semver tag such as `v0.5.0` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 
@@ -504,4 +552,6 @@ long-lived token:
 - allowed action: `npm publish`
 
 Trusted publishing uses GitHub Actions OIDC and automatically generates npm
-provenance for public packages.
+provenance for public packages. The release workflow also packs the npm tarball,
+attests that exact artifact with GitHub build provenance, and publishes the
+same tarball.

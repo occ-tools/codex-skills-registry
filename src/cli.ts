@@ -8,6 +8,7 @@ import { loadIssueBaselineFile } from "./baseline.js";
 import { filterIssuesByChangedFiles, loadChangedFiles } from "./changed-files.js";
 import { emitGithubAnnotations } from "./cli-output.js";
 import { executeMockSkill } from "./executor.js";
+import { publishPullRequestComment } from "./github-comment.js";
 import {
   applyIssuePolicyFilters,
   createIssueBaseline,
@@ -37,6 +38,7 @@ import { SkillsRegistry, formatValidationIssues, type RegistryLoadOptions } from
 import { explainRegistryRule, listRegistryRules } from "./rules.js";
 import { createSarifLog } from "./sarif.js";
 import { TriggerTypeSchema, type TriggerType, type ValidationIssue } from "./schema.js";
+import { writeRegistrySite } from "./site.js";
 
 const { version: VERSION } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -76,7 +78,9 @@ export async function runCli(argv = process.argv): Promise<void> {
 
   program
     .name("codex-skills")
-    .description("Validate, index, and mock-run Codex Skills, plugins, and MCP configs.")
+    .description(
+      "Validate, index, and mock-run Codex Skills, plugins, MCP configs, and workflow risk.",
+    )
     .version(VERSION)
     .option("-C, --cwd <dir>", "project directory to inspect", process.cwd())
     .option("--config <file>", "JSON/YAML file containing additional skill records")
@@ -200,9 +204,18 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("--max-findings <count>", "maximum findings to include in the comment", "10")
     .option("--report-path <path>", "report artifact path to include in the comment")
     .option("--sarif-path <path>", "SARIF artifact path to include in the comment")
+    .option("--post", "create or update the GitHub pull request comment")
+    .option("--comment-marker <marker>", "hidden marker used to update an existing PR comment")
     .action(
       async (
-        options: { out?: string; maxFindings: string; reportPath?: string; sarifPath?: string },
+        options: {
+          out?: string;
+          maxFindings: string;
+          reportPath?: string;
+          sarifPath?: string;
+          post?: boolean;
+          commentMarker?: string;
+        },
         command: Command,
       ) => {
         await handlePrComment(
@@ -212,6 +225,18 @@ export async function runCli(argv = process.argv): Promise<void> {
         );
       },
     );
+
+  program
+    .command("site")
+    .description("generate a static GitHub Pages-ready documentation site")
+    .option("-o, --out <dir>", "output directory", "site")
+    .action(async (options: { out: string }, command: Command) => {
+      await handleSite(
+        toLoadOptions(command.parent?.opts() ?? {}),
+        options,
+        toOutputOptions(command.parent?.opts() ?? {}),
+      );
+    });
 
   program
     .command("baseline")
@@ -263,7 +288,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .description("write a starter .codex-skills-registry.yaml policy file")
     .option(
       "--preset <preset>",
-      "policy preset: recommended, strict-mcp, or plugin-review",
+      "policy preset: recommended, strict-mcp, plugin-review, or strict-supply-chain",
       "recommended",
     )
     .option("-o, --out <file>", "output file; prints to stdout when omitted")
@@ -513,6 +538,7 @@ async function handleDoctor(
       invalidSkills: invalid.length,
       mcpServers: registry.listMcpServers().length,
       plugins: registry.listPlugins().length,
+      workflows: registry.listWorkflows().length,
       auditIssues: auditIssues.length,
       suppressedIssues:
         diagnostics.suppressedIssues.length +
@@ -561,6 +587,7 @@ async function handleDoctor(
     );
     console.log(`MCP servers: ${report.summary.mcpServers} discovered`);
     console.log(`Plugins: ${report.summary.plugins} discovered`);
+    console.log(`Workflows: ${report.summary.workflows} discovered`);
     console.log(
       `Audit: ${report.summary.auditIssues} issue${report.summary.auditIssues === 1 ? "" : "s"} found`,
     );
@@ -709,7 +736,14 @@ async function handleReport(
 
 async function handlePrComment(
   options: CliLoadOptions,
-  commentOptions: { out?: string; maxFindings: string; reportPath?: string; sarifPath?: string },
+  commentOptions: {
+    out?: string;
+    maxFindings: string;
+    reportPath?: string;
+    sarifPath?: string;
+    post?: boolean;
+    commentMarker?: string;
+  },
   outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
 ): Promise<void> {
   rejectSarifFor("pr-comment", outputOptions);
@@ -721,6 +755,16 @@ async function handlePrComment(
     ...index,
     diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
   });
+  const comment = formatPullRequestComment(report, {
+    maxFindings: parsePositiveInt(commentOptions.maxFindings, "max-findings"),
+    suppressedCount: filteredDiagnostics.suppressedIssues.length,
+    baselineCount: filteredDiagnostics.baselineIssues.length,
+    reportPath: commentOptions.reportPath,
+    sarifPath: commentOptions.sarifPath,
+  });
+  const publishResult = commentOptions.post
+    ? await publishCommentBestEffort(comment, commentOptions.commentMarker)
+    : undefined;
   const output =
     outputOptions.format === "json"
       ? `${JSON.stringify(
@@ -728,17 +772,12 @@ async function handlePrComment(
             report,
             suppressedIssues: filteredDiagnostics.suppressedIssues,
             baselineIssues: filteredDiagnostics.baselineIssues,
+            ...(publishResult ? { publishResult } : {}),
           },
           null,
           2,
         )}\n`
-      : formatPullRequestComment(report, {
-          maxFindings: parsePositiveInt(commentOptions.maxFindings, "max-findings"),
-          suppressedCount: filteredDiagnostics.suppressedIssues.length,
-          baselineCount: filteredDiagnostics.baselineIssues.length,
-          reportPath: commentOptions.reportPath,
-          sarifPath: commentOptions.sarifPath,
-        });
+      : comment;
 
   if (!commentOptions.out) {
     console.log(output);
@@ -748,6 +787,35 @@ async function handlePrComment(
   const outputPath = path.resolve(options.cwd ?? process.cwd(), commentOptions.out);
   await writeFile(outputPath, output, "utf8");
   console.log(`Wrote pull request comment to ${outputPath}`);
+}
+
+async function handleSite(
+  options: CliLoadOptions,
+  siteOptions: { out: string },
+  outputOptions: CliOutputOptions = DEFAULT_OUTPUT_OPTIONS,
+): Promise<void> {
+  rejectSarifFor("site", outputOptions);
+  const registry = await SkillsRegistry.load(options);
+  const filterContext = await createCliIssueFilterContext(options, registry);
+  const index = registry.toIndex({ relativePaths: true });
+  const filteredDiagnostics = filterCliIssues(index.diagnostics, options, registry, filterContext);
+  const report = createRegistryReport({
+    ...index,
+    diagnostics: [...filterContext.baselineDiagnostics, ...filteredDiagnostics.activeIssues],
+  });
+  const manifest = await writeRegistrySite({
+    outDir: path.resolve(options.cwd ?? process.cwd(), siteOptions.out),
+    report,
+    rules: listRegistryRules(),
+    generatedAt: index.generatedAt,
+  });
+
+  if (outputOptions.format === "json") {
+    writeJson(manifest);
+    return;
+  }
+
+  console.log(`Wrote registry site to ${manifest.outDir}`);
 }
 
 async function handleBaseline(
@@ -915,6 +983,36 @@ function shouldFail(issues: ValidationIssue[], policy: RegistryPolicy): boolean 
     issues.some((issue) => issue.severity === "error") ||
     (policy.failOnWarnings && issues.length > 0)
   );
+}
+
+async function publishCommentBestEffort(
+  body: string,
+  marker?: string,
+): Promise<Awaited<ReturnType<typeof publishPullRequestComment>>> {
+  try {
+    const result = await publishPullRequestComment({
+      body,
+      marker,
+      token: process.env.GITHUB_TOKEN,
+      repository: process.env.REGISTRY_GITHUB_REPOSITORY ?? process.env.GITHUB_REPOSITORY,
+      pullRequestNumber: process.env.REGISTRY_GITHUB_PR_NUMBER ?? process.env.GITHUB_PR_NUMBER,
+      apiUrl: process.env.GITHUB_API_URL,
+    });
+
+    if (result.skippedReason) {
+      console.error(`Warning: skipped pull request comment publish: ${result.skippedReason}`);
+    }
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Warning: failed to publish pull request comment: ${message}`);
+    return {
+      posted: false,
+      updated: false,
+      skippedReason: message,
+    };
+  }
 }
 
 function issueForJson(issue: ValidationIssue, options: CliLoadOptions): ValidationIssue {

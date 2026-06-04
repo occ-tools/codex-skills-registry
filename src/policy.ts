@@ -5,7 +5,12 @@ import { z } from "zod";
 import { zodErrorToIssues, type ValidationIssue } from "./schema.js";
 import { firstExistingPath } from "./utils.js";
 
-export const RegistryPolicyPresetSchema = z.enum(["recommended", "strict-mcp", "plugin-review"]);
+export const RegistryPolicyPresetSchema = z.enum([
+  "recommended",
+  "strict-mcp",
+  "plugin-review",
+  "strict-supply-chain",
+]);
 export type RegistryPolicyPreset = z.infer<typeof RegistryPolicyPresetSchema>;
 
 const PolicyExtendsSchema = z
@@ -37,6 +42,7 @@ export const RegistryPolicyInputSchema = z
   .object({
     extends: PolicyExtendsSchema,
     requirePinnedMcpPackages: z.boolean().optional(),
+    requirePinnedWorkflowActions: z.boolean().optional(),
     allowedSkills: z.array(z.string().min(1)).optional(),
     deniedSkills: z.array(z.string().min(1)).optional(),
     allowedPlugins: z.array(z.string().min(1)).optional(),
@@ -58,6 +64,7 @@ export const RegistryPolicyInputSchema = z
 export const RegistryPolicySchema = RegistryPolicyInputSchema.omit({ extends: true })
   .extend({
     requirePinnedMcpPackages: z.boolean().default(false),
+    requirePinnedWorkflowActions: z.boolean().default(false),
     requireExplicitMcpToolPolicy: z.boolean().default(false),
     requirePluginSkillPaths: z.boolean().default(false),
     failOnWarnings: z.boolean().default(false),
@@ -93,6 +100,13 @@ export const REGISTRY_POLICY_PRESETS: Record<RegistryPolicyPreset, RegistryPolic
     requirePluginSkillPaths: true,
     requireExplicitMcpToolPolicy: true,
     failOnWarnings: false,
+  },
+  "strict-supply-chain": {
+    requirePinnedMcpPackages: true,
+    requirePinnedWorkflowActions: true,
+    requireExplicitMcpToolPolicy: true,
+    requirePluginSkillPaths: true,
+    failOnWarnings: true,
   },
 };
 
@@ -199,6 +213,11 @@ export function formatRegistryPolicyYaml(policy: RegistryPolicyInput): string {
   }
 
   appendBooleanPolicyLine(lines, "requirePinnedMcpPackages", policy.requirePinnedMcpPackages);
+  appendBooleanPolicyLine(
+    lines,
+    "requirePinnedWorkflowActions",
+    policy.requirePinnedWorkflowActions,
+  );
   appendStringListPolicyLines(lines, "allowedSkills", policy.allowedSkills);
   appendStringListPolicyLines(lines, "deniedSkills", policy.deniedSkills);
   appendStringListPolicyLines(lines, "allowedPlugins", policy.allowedPlugins);

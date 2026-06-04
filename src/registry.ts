@@ -20,6 +20,7 @@ import {
   type ValidationResult,
 } from "./schema.js";
 import { isSubpath, relativePathInside, skillLine } from "./utils.js";
+import { discoverGithubWorkflows, type DiscoveredWorkflow } from "./workflows.js";
 
 export interface RegistryLoadOptions extends DiscoverOptions {
   configFile?: string;
@@ -31,6 +32,7 @@ export interface RegistryIndex {
   skills: CodexSkill[];
   mcpServers: DiscoveredMcpServer[];
   plugins: DiscoveredPlugin[];
+  workflows: DiscoveredWorkflow[];
   diagnostics: DiscoveryDiagnostic[];
   policy: RegistryPolicy;
 }
@@ -53,6 +55,7 @@ export class SkillsRegistry {
   private readonly skills = new Map<string, CodexSkill>();
   private readonly mcpServers: DiscoveredMcpServer[] = [];
   private readonly plugins: DiscoveredPlugin[] = [];
+  private readonly workflows: DiscoveredWorkflow[] = [];
   private readonly diagnostics: DiscoveryDiagnostic[] = [];
   private policy: RegistryPolicy = DEFAULT_POLICY;
   private policyPath?: string;
@@ -68,14 +71,17 @@ export class SkillsRegistry {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const policy = await loadRegistryPolicy(cwd, options.policyFile);
     const discovered = await discoverProject(options);
+    const workflows = await discoverGithubWorkflows(cwd);
 
     registry.cwd = cwd;
     registry.policy = policy.policy;
     registry.policyPath = policy.sourcePath;
     registry.addDiagnostics(policy.diagnostics);
     registry.addDiagnostics(discovered.diagnostics);
+    registry.addDiagnostics(workflows.diagnostics);
     registry.mcpServers.push(...dedupeMcpServers(discovered.mcpServers));
     registry.plugins.push(...discovered.plugins);
+    registry.workflows.push(...workflows.workflows);
 
     for (const skill of discovered.skills) {
       registry.registerSkill(skill);
@@ -297,6 +303,15 @@ export class SkillsRegistry {
   }
 
   /**
+   * Lists discovered GitHub Actions workflow files.
+   *
+   * @returns Workflow entries.
+   */
+  listWorkflows(): DiscoveredWorkflow[] {
+    return [...this.workflows].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
    * Returns discovery and registry diagnostics collected during loading.
    *
    * @returns Diagnostics.
@@ -336,6 +351,7 @@ export class SkillsRegistry {
       {
         skills: this.listSkills(),
         mcpServers: this.listMcpServers(),
+        workflows: this.listWorkflows(),
       },
       {
         ...options,
@@ -355,6 +371,7 @@ export class SkillsRegistry {
       skills: this.listSkills(),
       mcpServers: this.listMcpServers(),
       plugins: this.listPlugins(),
+      workflows: this.listWorkflows(),
       diagnostics: [...this.listDiagnostics(), ...this.audit()],
       policy: this.policy,
     };
@@ -638,6 +655,10 @@ function relativizeRegistryIndex(index: RegistryIndex, cwd: string): RegistryInd
       ...plugin,
       sourcePath: relativizePathValue(plugin.sourcePath, root) ?? plugin.sourcePath,
       rootDir: relativizePathValue(plugin.rootDir, root) ?? plugin.rootDir,
+    })),
+    workflows: index.workflows.map((workflow) => ({
+      ...workflow,
+      sourcePath: relativizePathValue(workflow.sourcePath, root) ?? workflow.sourcePath,
     })),
     diagnostics: index.diagnostics.map((issue) => ({
       ...issue,

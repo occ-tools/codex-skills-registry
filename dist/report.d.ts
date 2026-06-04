@@ -4,6 +4,7 @@ export interface RegistryReportSummary {
     skills: number;
     mcpServers: number;
     plugins: number;
+    workflows: number;
     errors: number;
     warnings: number;
 }
@@ -23,6 +24,12 @@ export interface RegistryReport {
     plugins: Array<{
         name: string;
         sourcePath: string;
+    }>;
+    workflows: Array<{
+        name: string;
+        sourcePath: string;
+        jobs: number;
+        actions: number;
     }>;
     issues: ValidationIssue[];
     nextActions: string[];

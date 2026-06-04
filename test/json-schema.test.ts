@@ -35,6 +35,7 @@ describe("json schema export", () => {
     expect(schema.$id).toContain("/policy.schema.json");
     expect(schema.title).toBe("Codex Skills Registry Policy");
     expect(JSON.stringify(schema)).toContain("requirePinnedMcpPackages");
+    expect(JSON.stringify(schema)).toContain("requirePinnedWorkflowActions");
   });
 
   it("lists stable CLI schema names", () => {

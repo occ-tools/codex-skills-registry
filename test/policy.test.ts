@@ -51,9 +51,20 @@ describe("policy", () => {
     expect(policy.failOnWarnings).toBe(true);
   });
 
+  it("resolves supply-chain strict preset", () => {
+    const policy = resolveRegistryPolicy({
+      extends: ["strict-supply-chain"],
+    });
+
+    expect(policy.requirePinnedMcpPackages).toBe(true);
+    expect(policy.requirePinnedWorkflowActions).toBe(true);
+    expect(policy.failOnWarnings).toBe(true);
+  });
+
   it("formats starter policy YAML", () => {
     const yaml = formatRegistryPolicyYaml({
       extends: ["recommended"],
+      requirePinnedWorkflowActions: true,
       deniedMcpCommands: ["bash"],
       baselineFile: "codex-skills-baseline.json",
       failOnWarnings: false,
@@ -68,6 +79,7 @@ describe("policy", () => {
 
     expect(yaml).toContain("extends:");
     expect(yaml).toContain("  - recommended");
+    expect(yaml).toContain("requirePinnedWorkflowActions: true");
     expect(yaml).toContain("deniedMcpCommands:");
     expect(yaml).toContain("baselineFile: codex-skills-baseline.json");
     expect(yaml).toContain("suppressions:");

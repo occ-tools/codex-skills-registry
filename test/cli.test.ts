@@ -7,6 +7,7 @@ import { runCli } from "../src/cli.js";
 describe("CLI", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     process.exitCode = undefined;
   });
 
@@ -271,6 +272,25 @@ describe("CLI", () => {
     expect(output).toContain("Codex Skills Registry Report");
   });
 
+  it("writes static registry sites", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-site-"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await runCli(["node", "codex-skills", "--cwd", tmp, "--no-examples", "site"]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      const html = await readFile(path.join(tmp, "site", "index.html"), "utf8");
+      const rules = await readFile(path.join(tmp, "site", "rules.html"), "utf8");
+
+      expect(output).toContain("Wrote registry site");
+      expect(html).toContain("Codex Skills Registry");
+      expect(rules).toContain("WORKFLOW_UNPINNED_ACTION");
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("writes starter policy files", async () => {
     const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-policy-"));
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -379,6 +399,34 @@ describe("CLI", () => {
     expect(output).toContain("## Codex Skills Registry");
     expect(output).toContain("SCHEMA_VALIDATION_FAILED");
     expect(output).toContain("Report: codex-skills-registry-report.md");
+  });
+
+  it("skips pull request comment posting when GitHub context is unavailable", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubEnv("GITHUB_REPOSITORY", "");
+    vi.stubEnv("REGISTRY_GITHUB_REPOSITORY", "");
+    vi.stubEnv("GITHUB_PR_NUMBER", "");
+    vi.stubEnv("REGISTRY_GITHUB_PR_NUMBER", "");
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      process.cwd(),
+      "--format",
+      "json",
+      "pr-comment",
+      "--post",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    const parsed = JSON.parse(output) as { publishResult: { posted: boolean } };
+    const stderr = error.mock.calls.map((call) => call.join(" ")).join("\n");
+
+    expect(parsed.publishResult.posted).toBe(false);
+    expect(stderr).toContain("skipped pull request comment publish");
   });
 
   it("explains issue codes", async () => {

@@ -87,12 +87,15 @@ declare const JSON_SCHEMA_DEFINITIONS: readonly [{
             recommended: "recommended";
             "strict-mcp": "strict-mcp";
             "plugin-review": "plugin-review";
+            "strict-supply-chain": "strict-supply-chain";
         }>, z.ZodArray<z.ZodEnum<{
             recommended: "recommended";
             "strict-mcp": "strict-mcp";
             "plugin-review": "plugin-review";
+            "strict-supply-chain": "strict-supply-chain";
         }>>]>>;
         requirePinnedMcpPackages: z.ZodOptional<z.ZodBoolean>;
+        requirePinnedWorkflowActions: z.ZodOptional<z.ZodBoolean>;
         allowedSkills: z.ZodOptional<z.ZodArray<z.ZodString>>;
         deniedSkills: z.ZodOptional<z.ZodArray<z.ZodString>>;
         allowedPlugins: z.ZodOptional<z.ZodArray<z.ZodString>>;

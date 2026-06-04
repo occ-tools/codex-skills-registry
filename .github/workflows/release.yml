@@ -6,6 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
+  attestations: write
   contents: read
   id-token: write
 
@@ -14,13 +15,14 @@ jobs:
     name: publish npm package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
+      - run: npm run release:check
       - id: package
         shell: bash
         run: |
@@ -34,7 +36,23 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - run: npm publish --access public
+      - id: pack
+        if: steps.published.outputs.exists != 'true'
+        shell: bash
+        run: |
+          npm pack --json > npm-pack.json
+          tarball="$(node <<'NODE'
+          const data = require("./npm-pack.json");
+          console.log(data[0].filename);
+          NODE
+          )"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Attest npm tarball provenance
+        if: steps.published.outputs.exists != 'true'
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+      - run: npm publish "${{ steps.pack.outputs.tarball }}" --access public
         if: steps.published.outputs.exists != 'true'
       - name: Report existing npm version
         if: steps.published.outputs.exists == 'true'

@@ -4,6 +4,7 @@ export declare const RegistryPolicyPresetSchema: z.ZodEnum<{
     recommended: "recommended";
     "strict-mcp": "strict-mcp";
     "plugin-review": "plugin-review";
+    "strict-supply-chain": "strict-supply-chain";
 }>;
 export type RegistryPolicyPreset = z.infer<typeof RegistryPolicyPresetSchema>;
 /**
@@ -15,12 +16,15 @@ export declare const RegistryPolicyInputSchema: z.ZodObject<{
         recommended: "recommended";
         "strict-mcp": "strict-mcp";
         "plugin-review": "plugin-review";
+        "strict-supply-chain": "strict-supply-chain";
     }>, z.ZodArray<z.ZodEnum<{
         recommended: "recommended";
         "strict-mcp": "strict-mcp";
         "plugin-review": "plugin-review";
+        "strict-supply-chain": "strict-supply-chain";
     }>>]>>;
     requirePinnedMcpPackages: z.ZodOptional<z.ZodBoolean>;
+    requirePinnedWorkflowActions: z.ZodOptional<z.ZodBoolean>;
     allowedSkills: z.ZodOptional<z.ZodArray<z.ZodString>>;
     deniedSkills: z.ZodOptional<z.ZodArray<z.ZodString>>;
     allowedPlugins: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -57,6 +61,7 @@ export declare const RegistryPolicySchema: z.ZodObject<{
     deniedRemoteMcpHosts: z.ZodOptional<z.ZodArray<z.ZodString>>;
     baselineFile: z.ZodOptional<z.ZodString>;
     requirePinnedMcpPackages: z.ZodDefault<z.ZodBoolean>;
+    requirePinnedWorkflowActions: z.ZodDefault<z.ZodBoolean>;
     requireExplicitMcpToolPolicy: z.ZodDefault<z.ZodBoolean>;
     requirePluginSkillPaths: z.ZodDefault<z.ZodBoolean>;
     failOnWarnings: z.ZodDefault<z.ZodBoolean>;

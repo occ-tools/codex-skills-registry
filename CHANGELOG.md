@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+- Add GitHub Actions workflow discovery to registry indexes, reports, PR comments, and audit output.
+- Add workflow audit rules for explicit permissions, broad token scope, `pull_request_target`, unpinned actions, PR input interpolation, and download-execute shell pipelines.
+- Add policy `requirePinnedWorkflowActions` and the `strict-supply-chain` preset.
+- Add `site` CLI command, SDK helper, Action command, and GitHub Pages workflow for generated documentation.
+- Add opt-in PR comment publishing through `pr-comment --post` and Action `post-comment: "true"`.
+- Harden remote MCP auth checks for URL query credentials and invalid bearer/header environment variable names.
+- Add OpenSSF Scorecard, Pages, PR comment, and release artifact attestation workflows.
+- Pin this repository's GitHub Actions references to full commit SHAs.
+
 ## 0.4.0
 
 - Add stable issue codes, fix hints, and SARIF rule IDs for policy/audit findings.

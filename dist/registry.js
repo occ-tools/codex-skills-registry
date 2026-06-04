@@ -6,6 +6,7 @@ import { discoverProject, parseSkillMarkdown, } from "./discovery.js";
 import { DEFAULT_POLICY, loadRegistryPolicy } from "./policy.js";
 import { CodexSkillSchema, normalizeSkillInput, zodErrorToIssues, } from "./schema.js";
 import { isSubpath, relativePathInside, skillLine } from "./utils.js";
+import { discoverGithubWorkflows } from "./workflows.js";
 /**
  * In-memory index for Codex maintainer automation assets. The registry is
  * deliberately small and side-effect free: it validates, lists, and prepares
@@ -16,6 +17,7 @@ export class SkillsRegistry {
     skills = new Map();
     mcpServers = [];
     plugins = [];
+    workflows = [];
     diagnostics = [];
     policy = DEFAULT_POLICY;
     policyPath;
@@ -30,13 +32,16 @@ export class SkillsRegistry {
         const cwd = path.resolve(options.cwd ?? process.cwd());
         const policy = await loadRegistryPolicy(cwd, options.policyFile);
         const discovered = await discoverProject(options);
+        const workflows = await discoverGithubWorkflows(cwd);
         registry.cwd = cwd;
         registry.policy = policy.policy;
         registry.policyPath = policy.sourcePath;
         registry.addDiagnostics(policy.diagnostics);
         registry.addDiagnostics(discovered.diagnostics);
+        registry.addDiagnostics(workflows.diagnostics);
         registry.mcpServers.push(...dedupeMcpServers(discovered.mcpServers));
         registry.plugins.push(...discovered.plugins);
+        registry.workflows.push(...workflows.workflows);
         for (const skill of discovered.skills) {
             registry.registerSkill(skill);
         }
@@ -236,6 +241,14 @@ export class SkillsRegistry {
         return [...this.plugins].sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
     }
     /**
+     * Lists discovered GitHub Actions workflow files.
+     *
+     * @returns Workflow entries.
+     */
+    listWorkflows() {
+        return [...this.workflows].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    /**
      * Returns discovery and registry diagnostics collected during loading.
      *
      * @returns Diagnostics.
@@ -271,6 +284,7 @@ export class SkillsRegistry {
         return auditRegistry({
             skills: this.listSkills(),
             mcpServers: this.listMcpServers(),
+            workflows: this.listWorkflows(),
         }, {
             ...options,
             policy: options.policy ?? this.policy,
@@ -287,6 +301,7 @@ export class SkillsRegistry {
             skills: this.listSkills(),
             mcpServers: this.listMcpServers(),
             plugins: this.listPlugins(),
+            workflows: this.listWorkflows(),
             diagnostics: [...this.listDiagnostics(), ...this.audit()],
             policy: this.policy,
         };
@@ -528,6 +543,10 @@ function relativizeRegistryIndex(index, cwd) {
             ...plugin,
             sourcePath: relativizePathValue(plugin.sourcePath, root) ?? plugin.sourcePath,
             rootDir: relativizePathValue(plugin.rootDir, root) ?? plugin.rootDir,
+        })),
+        workflows: index.workflows.map((workflow) => ({
+            ...workflow,
+            sourcePath: relativizePathValue(workflow.sourcePath, root) ?? workflow.sourcePath,
         })),
         diagnostics: index.diagnostics.map((issue) => ({
             ...issue,

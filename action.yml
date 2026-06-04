@@ -11,7 +11,7 @@ inputs:
     required: false
     default: .
   command:
-    description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, schema, pr-comment, and baseline.
+    description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, schema, pr-comment, baseline, and site.
     required: false
     default: doctor
   include-examples:
@@ -46,6 +46,14 @@ inputs:
     description: Optional schema name when command is schema. Omit to export the full catalog.
     required: false
     default: ""
+  post-comment:
+    description: When command is pr-comment, create or update a pull request comment using github.token. Requires pull-requests: write on the caller workflow.
+    required: false
+    default: "false"
+  comment-marker:
+    description: Hidden marker used to update an existing pull request comment.
+    required: false
+    default: "<!-- codex-skills-registry -->"
 
 outputs:
   index-path:
@@ -66,6 +74,9 @@ outputs:
   baseline-path:
     description: Path to the generated baseline file when command is baseline.
     value: ${{ steps.run.outputs.baseline-path }}
+  site-path:
+    description: Path to the generated static site when command is site.
+    value: ${{ steps.run.outputs.site-path }}
   issue-count:
     description: Active issue count from JSON summary output.
     value: ${{ steps.run.outputs.issue-count }}
@@ -111,6 +122,11 @@ runs:
         REGISTRY_INPUT_FORMAT: ${{ inputs.format }}
         REGISTRY_INPUT_STRICT: ${{ inputs.strict }}
         REGISTRY_INPUT_SCHEMA: ${{ inputs.schema }}
+        REGISTRY_INPUT_POST_COMMENT: ${{ inputs.post-comment }}
+        REGISTRY_INPUT_COMMENT_MARKER: ${{ inputs.comment-marker }}
+        GITHUB_TOKEN: ${{ github.token }}
+        REGISTRY_GITHUB_REPOSITORY: ${{ github.repository }}
+        REGISTRY_GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
         cd "$GITHUB_ACTION_PATH"
@@ -227,7 +243,11 @@ runs:
             ;;
           pr-comment)
             out_file="$target_path/codex-skills-registry-pr-comment.md"
-            node dist/cli.js "${args[@]}" pr-comment --out codex-skills-registry-pr-comment.md --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif
+            comment_args=(--out codex-skills-registry-pr-comment.md --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif --comment-marker "$REGISTRY_INPUT_COMMENT_MARKER")
+            if [[ "$REGISTRY_INPUT_POST_COMMENT" == "true" ]]; then
+              comment_args+=(--post)
+            fi
+            node dist/cli.js "${args[@]}" pr-comment "${comment_args[@]}"
             echo "comment-path=$out_file" >> "$GITHUB_OUTPUT"
             write_issue_outputs doctor "${strict_args[@]}"
             ;;
@@ -244,6 +264,11 @@ runs:
             fi
             node dist/cli.js "${args[@]}" schema "${schema_args[@]}" --out codex-skills-registry.schema.json
             echo "schema-path=$out_file" >> "$GITHUB_OUTPUT"
+            ;;
+          site)
+            out_dir="$target_path/codex-skills-registry-site"
+            node dist/cli.js "${args[@]}" site --out codex-skills-registry-site
+            echo "site-path=$out_dir" >> "$GITHUB_OUTPUT"
             ;;
           *)
             echo "Unsupported command: $REGISTRY_INPUT_COMMAND" >&2

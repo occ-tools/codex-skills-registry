@@ -3,10 +3,12 @@ import type { DiscoveredMcpServer } from "./discovery.js";
 import type { RegistryPolicy } from "./policy.js";
 import type { CodexSkill, ValidationIssue } from "./schema.js";
 import { skillLine } from "./utils.js";
+import { auditGithubWorkflow, type DiscoveredWorkflow } from "./workflows.js";
 
 export interface AuditInput {
   skills: CodexSkill[];
   mcpServers: DiscoveredMcpServer[];
+  workflows?: DiscoveredWorkflow[];
 }
 
 export interface AuditOptions {
@@ -40,6 +42,7 @@ export function auditRegistry(input: AuditInput, options: AuditOptions = {}): Va
   return [
     ...input.skills.flatMap((skill) => auditSkill(skill, options)),
     ...input.mcpServers.flatMap((server) => auditMcpServer(server, options)),
+    ...(input.workflows ?? []).flatMap((workflow) => auditGithubWorkflow(workflow, options)),
   ];
 }
 
@@ -291,6 +294,21 @@ export function auditMcpServer(
         help: "Set bearer_token_env_var when the endpoint requires auth, or document why it is public.",
       });
     }
+
+    for (const [key, value] of url.searchParams.entries()) {
+      if (looksLikeSecretKey(key) || looksLikeSecretLiteral(value)) {
+        issues.push({
+          severity: "warning",
+          code: "MCP_REMOTE_URL_SECRET",
+          path: `${basePath}.url`,
+          file: server.sourcePath,
+          line: server.fieldLines?.url ?? server.line,
+          message: "Remote MCP URL appears to contain a credential in the query string.",
+          help: "Move credentials to bearer_token_env_var or env_http_headers instead of committing URL secrets.",
+        });
+        break;
+      }
+    }
   }
 
   if (!config.enabled_tools && !config.disabled_tools) {
@@ -358,6 +376,22 @@ export function auditMcpServer(
           help: "Move literal header secrets to env_http_headers so only variable names are committed.",
         });
       }
+
+      if (
+        headerField === "env_http_headers" &&
+        typeof value === "string" &&
+        !isEnvironmentVariableName(value)
+      ) {
+        issues.push({
+          severity: "warning",
+          code: "MCP_HEADER_ENV_VAR_INVALID",
+          path: `${basePath}.${headerField}.${key}`,
+          file: server.sourcePath,
+          line: server.fieldLines?.[headerField] ?? server.line,
+          message: "env_http_headers values should be portable environment variable names.",
+          help: "Use names such as MCP_AUTH_HEADER and keep literal header values out of committed config.",
+        });
+      }
     }
   }
 
@@ -374,6 +408,19 @@ export function auditMcpServer(
       message:
         "bearer_token_env_var should name an environment variable, not contain a token value.",
       help: "Use a variable name such as MCP_TOKEN instead of pasting the token itself.",
+    });
+  } else if (
+    typeof config.bearer_token_env_var === "string" &&
+    !isEnvironmentVariableName(config.bearer_token_env_var)
+  ) {
+    issues.push({
+      severity: "warning",
+      code: "MCP_REMOTE_TOKEN_ENV_VAR_INVALID",
+      path: `${basePath}.bearer_token_env_var`,
+      file: server.sourcePath,
+      line: server.fieldLines?.bearer_token_env_var ?? server.line,
+      message: "bearer_token_env_var should be a portable environment variable name.",
+      help: "Use uppercase letters, numbers, and underscores, for example MCP_TOKEN.",
     });
   }
 
@@ -392,4 +439,8 @@ function looksLikeSecretLiteral(value: unknown): boolean {
     /[A-Za-z]/.test(value) &&
     /[0-9]/.test(value)
   );
+}
+
+function isEnvironmentVariableName(value: string): boolean {
+  return /^[A-Z_][A-Z0-9_]*$/.test(value);
 }

@@ -25,6 +25,7 @@ Current behavior:
 
 - parse `SKILL.md` frontmatter
 - validate MCP server config shape
+- inspect GitHub Actions workflow permission and action-reference risk
 - audit risky patterns such as shell-based MCP commands, broad tool exposure,
   insecure remote MCP hosts, likely secret literals, and entry points that
   escape a skill directory
@@ -40,13 +41,18 @@ Primary threats this project is designed to surface:
 - remote MCP servers that use insecure transport or unapproved hosts
 - secrets embedded directly in MCP environment, HTTP header, or bearer token
   configuration
+- secrets embedded in remote MCP URL query strings
+- workflows that omit explicit permissions, grant broad write permissions, use
+  `pull_request_target`, reference mutable actions, or pipe downloaded scripts
+  into a shell
 
 Current controls:
 
 - Skill execution is mocked only; entry point scripts are not invoked.
 - Plugin skill and MCP paths are checked against their containing root.
 - Project policy can require pinned MCP packages, approved MCP commands,
-  approved remote hosts, explicit MCP tool policy, and plugin skill paths.
+  pinned workflow actions, approved remote hosts, explicit MCP tool policy, and
+  plugin skill paths.
 - Project policy can deny specific skills, plugins, MCP servers, commands, and
   remote MCP hosts.
 - Baseline files and expiring suppressions support incremental adoption without
@@ -54,6 +60,10 @@ Current controls:
 - Findings include source file and best-effort line hints for CI review.
 - Examples should use harmless local templates and must not include real
   credentials, tokens, private URLs, or production data.
+- PR comment publishing is opt-in and should be run with only
+  `pull-requests: write` plus read-only contents permission.
+- The release workflow uses npm Trusted Publishing/OIDC and attests the packed
+  npm tarball before publishing that same artifact.
 
 Out of scope for the current release:
 

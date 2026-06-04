@@ -1,9 +1,11 @@
 import type { DiscoveredMcpServer } from "./discovery.js";
 import type { RegistryPolicy } from "./policy.js";
 import type { CodexSkill, ValidationIssue } from "./schema.js";
+import { type DiscoveredWorkflow } from "./workflows.js";
 export interface AuditInput {
     skills: CodexSkill[];
     mcpServers: DiscoveredMcpServer[];
+    workflows?: DiscoveredWorkflow[];
 }
 export interface AuditOptions {
     strict?: boolean;

@@ -31,6 +31,7 @@ export function formatPullRequestComment(
     `| Skills | ${report.summary.skills} |`,
     `| MCP servers | ${report.summary.mcpServers} |`,
     `| Plugins | ${report.summary.plugins} |`,
+    `| Workflows | ${report.summary.workflows} |`,
     `| Errors | ${report.summary.errors} |`,
     `| Warnings | ${report.summary.warnings} |`,
     `| Suppressed | ${options.suppressedCount ?? 0} |`,
