@@ -522,8 +522,8 @@ PR comments separately from fork-safe `pull_request_target` comment publishing.
 For the fork validation matrix, see
 [`docs/fork-pr-validation.md`](docs/fork-pr-validation.md).
 
-For supporting documentation, see `docs/README.md`. For owner-side follow-up
-work, see `docs/OWNER_NEXT_STEPS.md`.
+For supporting documentation, see [`docs/README.md`](docs/README.md). For
+owner-side follow-up work, see [`OWNER_NEXT_STEPS.md`](OWNER_NEXT_STEPS.md).
 
 ## SDK
 
