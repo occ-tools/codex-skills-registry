@@ -39,4 +39,6 @@
 - [x] GitHub Pages docs site generation is available through `codex-skills site` and the Pages workflow.
 - [x] PR comment auto-publishing is available through `post-comment: "true"` with narrow `pull-requests: write` permissions.
 - [ ] Add screenshots or copied examples of GitHub annotations and Code Scanning results after the first public demo PRs run.
-- [ ] Keep the standalone public demo repository synchronized with the latest tagged Action.
+- [x] Keep the standalone public demo repository synchronized with the latest tagged Action.
+
+Owner-side launch work is tracked in `docs/OWNER_NEXT_STEPS.md`.

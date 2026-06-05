@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # v0.6.2
+      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
         with:
           path: .
           command: doctor
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # v0.6.2
+      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
         with:
           path: .
           command: doctor
@@ -397,7 +397,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # v0.6.2
+  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
   with:
     path: .
     command: schema
@@ -408,7 +408,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # v0.6.2
+  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
   continue-on-error: true
   with:
     path: .
@@ -429,7 +429,7 @@ GitHub Action captures SARIF to `codex-skills-registry.sarif`.
 The examples pin the Action to a published release commit SHA so they pass
 strict supply-chain policies. When adopting a newer release, replace the SHA
 with that release commit. For exploratory adoption, a release tag such as
-`wangjiehu/codex-skills-registry@v0.6.2` is easier to update but less
+`wangjiehu/codex-skills-registry@v0.6.3` is easier to update but less
 reproducible.
 
 For PR-focused checks, pass a newline-delimited changed-file list:
@@ -484,7 +484,7 @@ steps:
       ref: ${{ github.event.pull_request.head.sha }}
       path: target
       persist-credentials: false
-  - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # v0.6.2
+  - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
     with:
       path: target
       command: pr-comment
@@ -522,8 +522,8 @@ PR comments separately from fork-safe `pull_request_target` comment publishing.
 For the fork validation matrix, see
 [`docs/fork-pr-validation.md`](docs/fork-pr-validation.md).
 
-For product planning and launch assets, see `docs/go-to-market.md` and
-`docs/v1-readiness-checklist.md`.
+For supporting documentation, see `docs/README.md`. For owner-side follow-up
+work, see `docs/OWNER_NEXT_STEPS.md`.
 
 ## SDK
 
@@ -576,7 +576,7 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.6.2` is pushed.
+Automated releases run when a semver tag such as `v0.6.3` is pushed.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

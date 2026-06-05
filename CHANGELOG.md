@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Remove stale planning docs and add a compact documentation index.
+- Add owner-side next steps for external validation, account security, and launch follow-through.
+- Keep README Action examples pinned without stale release-version comments.
+
 ## 0.6.3
 
 - Pin README Action examples to the published release commit SHA for strict supply-chain adoption.
