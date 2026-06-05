@@ -1,0 +1,5 @@
+node_modules/
+codex-skills-registry*.json
+codex-skills-registry*.md
+codex-skills-registry*.sarif
+site/

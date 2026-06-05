@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
+      - uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # pinned release SHA
         with:
           path: .
           command: doctor
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
+      - uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # pinned release SHA
         with:
           path: .
           command: doctor
@@ -397,7 +397,7 @@ To export a schema catalog or a single named schema from CI:
 
 ```yaml
 - id: schema
-  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
+  uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # pinned release SHA
   with:
     path: .
     command: schema
@@ -408,7 +408,7 @@ To upload SARIF to GitHub Code Scanning, run:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
+  uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # pinned release SHA
   continue-on-error: true
   with:
     path: .
@@ -484,7 +484,7 @@ steps:
       ref: ${{ github.event.pull_request.head.sha }}
       path: target
       persist-credentials: false
-  - uses: wangjiehu/codex-skills-registry@6ca91d6e6bddcf53c81a5ed1981785fe22a92c83 # pinned release SHA
+  - uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # pinned release SHA
     with:
       path: target
       command: pr-comment
@@ -513,12 +513,12 @@ node dist/cli.js --cwd demo/clean-project --no-examples doctor
 node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
 ```
 
-The standalone demo repository is
-[`wangjiehu/codex-skills-registry-demo`](https://github.com/wangjiehu/codex-skills-registry-demo).
-It contains a clean default branch plus intentionally risky and baseline
-adoption pull requests for public CI screenshots and reviewer walkthroughs. It
-also includes a fork-comment workflow pattern so maintainers can test same-repo
-PR comments separately from fork-safe `pull_request_target` comment publishing.
+`demo/standalone-project/` contains a copy-ready standalone demo template. It
+includes a clean default project, pinned registry Action workflows, SARIF
+upload, PR comment publishing, a static site artifact workflow, and a fork-safe
+`pull_request_target` comment pattern. There is no separate companion demo
+repository to maintain; copy this directory only for temporary public CI
+screenshots, reviewer walkthroughs, or real fork token-boundary validation.
 For the fork validation matrix, see
 [`docs/fork-pr-validation.md`](docs/fork-pr-validation.md).
 

@@ -1,0 +1,14 @@
+requirePinnedMcpPackages: true
+requirePinnedWorkflowActions: true
+allowedMcpCommands:
+  - node
+allowedRemoteMcpHosts:
+  - example.com
+requireExplicitMcpToolPolicy: true
+requirePluginSkillPaths: true
+failOnWarnings: false
+suppressions:
+  - code: "WORKFLOW_PULL_REQUEST_TARGET"
+    file: ".github/workflows/codex-skills-fork-comment.yml"
+    reason: "Fork PR comments use pinned trusted action code and a non-credentialed PR checkout."
+    expiresOn: "2027-06-05"

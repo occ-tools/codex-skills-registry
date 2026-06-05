@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Move standalone demo assets into `demo/standalone-project` so the main repository is the only demo maintenance source.
 - Remove stale planning docs and add a compact documentation index.
 - Add owner-side next steps for external validation, account security, and launch follow-through.
 - Keep README Action examples pinned without stale release-version comments.

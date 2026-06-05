@@ -1,8 +1,9 @@
 # codex-skills-registry demo
 
-This directory contains two small repositories for product demos and manual QA.
+This directory keeps demo fixtures and copy-ready demo assets in the product
+repository, so the main package remains the maintenance source.
 
-## Clean project
+## Local clean project
 
 ```bash
 node dist/cli.js --cwd demo/clean-project --no-examples doctor
@@ -12,7 +13,7 @@ node dist/cli.js --cwd demo/clean-project --no-examples pr-comment
 
 Expected result: one valid skill, one MCP server, no findings.
 
-## Risky project
+## Local risky project
 
 ```bash
 node dist/cli.js --cwd demo/risky-project --no-examples doctor --strict
@@ -24,3 +25,14 @@ node dist/cli.js --cwd demo/risky-project --no-examples baseline --strict --out 
 Expected result: findings for invalid skill metadata, an escaped entry point,
 shell-based MCP execution, broad tool approval, missing explicit tool policy,
 and a possible secret literal.
+
+## Standalone demo template
+
+`standalone-project/` is a copy-ready repository template for GitHub Actions
+demos. It contains a clean default project, pinned registry Action workflows,
+SARIF upload, PR comment publishing, a static site artifact workflow, and a
+fork-safe `pull_request_target` comment pattern.
+
+There is no separate companion demo repository to keep synchronized. Copy this
+directory only when GitHub's real pull request and fork permission boundaries
+need to be demonstrated.
