@@ -11,3 +11,7 @@ codex-skills-baseline.json
 codex-skills-report.html
 .env
 *.log
+
+# Local owner-only follow-up notes.
+/NETXT_STEPS.md
+/NEXT_STEPS.md

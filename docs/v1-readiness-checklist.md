@@ -40,5 +40,3 @@
 - [x] PR comment auto-publishing is available through `post-comment: "true"` with narrow `pull-requests: write` permissions.
 - [ ] Add screenshots or copied examples of GitHub annotations and Code Scanning results after the first public demo PRs run.
 - [x] Keep the standalone public demo repository synchronized with the latest tagged Action.
-
-Owner-side launch work is tracked in [`../NETXT_STEPS.md`](../NETXT_STEPS.md).
