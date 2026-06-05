@@ -12,8 +12,8 @@ Public repositories need two separate pull request paths:
 The fork-comment workflow should meet all of these requirements:
 
 - grant only `contents: read` and `pull-requests: write`;
-- use trusted workflow and action code from the base repository or a pinned
-  release reference;
+- use trusted workflow and action code from the base repository or a full
+  release commit SHA;
 - checkout pull request contents into a separate directory;
 - set `persist-credentials: false` on the pull request checkout;
 - run only static registry inspection against the pull request contents;

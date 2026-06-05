@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- Pin README Action examples to the published release commit SHA for strict supply-chain adoption.
+- Clarify fork PR guidance so comment workflows use trusted code or a full release commit SHA.
+
 ## 0.6.2
 
 - Document a fork-safe pull request comment adoption path with a dedicated validation matrix.
