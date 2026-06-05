@@ -41,4 +41,4 @@
 - [ ] Add screenshots or copied examples of GitHub annotations and Code Scanning results after the first public demo PRs run.
 - [x] Keep the standalone public demo repository synchronized with the latest tagged Action.
 
-Owner-side launch work is tracked in [`../OWNER_NEXT_STEPS.md`](../OWNER_NEXT_STEPS.md).
+Owner-side launch work is tracked in [`../NETXT_STEPS.md`](../NETXT_STEPS.md).

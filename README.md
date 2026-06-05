@@ -523,7 +523,7 @@ For the fork validation matrix, see
 [`docs/fork-pr-validation.md`](docs/fork-pr-validation.md).
 
 For supporting documentation, see [`docs/README.md`](docs/README.md). For
-owner-side follow-up work, see [`OWNER_NEXT_STEPS.md`](OWNER_NEXT_STEPS.md).
+owner-side follow-up work, see [`NETXT_STEPS.md`](NETXT_STEPS.md).
 
 ## SDK
 
