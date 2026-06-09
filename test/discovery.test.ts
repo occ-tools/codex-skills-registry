@@ -43,6 +43,7 @@ description: Validate a skill file that was saved with a byte order mark.
       "issue-triage",
       "pr-review",
       "release-notes",
+      "xquik-x-data",
     ]);
     expect(result.mcpServers.map((server) => server.name).sort()).toEqual([
       "context7",

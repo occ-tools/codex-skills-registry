@@ -28,7 +28,7 @@ describe("CLI", () => {
 
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
     const parsed = JSON.parse(output) as { summary: { skills: number; auditIssues: number } };
-    expect(parsed.summary.skills).toBe(3);
+    expect(parsed.summary.skills).toBe(4);
     expect(parsed.summary.auditIssues).toBe(0);
   });
 

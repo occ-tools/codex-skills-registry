@@ -12,7 +12,7 @@ describe("SkillsRegistry", () => {
       includeExamples: true,
     });
 
-    expect(registry.listSkills()).toHaveLength(3);
+    expect(registry.listSkills()).toHaveLength(4);
 
     const validation = await registry.validateSkillByName("issue-triage");
     expect(validation.valid).toBe(true);
@@ -20,6 +20,15 @@ describe("SkillsRegistry", () => {
     const result = await executeMockSkill(registry, "issue-triage");
     expect(result.success).toBe(true);
     expect(result.logs.join("\n")).toContain("accepted a issue event");
+
+    const xquikValidation = await registry.validateSkillByName("xquik-x-data");
+    expect(xquikValidation.valid).toBe(true);
+
+    const xquikResult = await executeMockSkill(registry, "xquik-x-data", {
+      payload: { task: "Plan a public tweet search" },
+    });
+    expect(xquikResult.success).toBe(true);
+    expect(xquikResult.logs.join("\n")).toContain("handler=scripts/run.ts");
   });
 
   it("rejects mock runs with unsupported triggers", async () => {
