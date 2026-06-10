@@ -17,6 +17,13 @@ by OpenAI.
 The project focuses on maintainer workflows: issue triage, pull request review,
 release notes, dependency review, and security-oriented automation.
 
+Example Skills in this repository are intentionally scoped to generic
+open-source maintainer workflows. Third-party service, social platform, vendor
+API, hosted connector, and account-scoped workflow examples should live in the
+contributor's own project unless this repository adds a dedicated community or
+third-party examples area. See `docs/examples-governance.md` for the acceptance
+rules.
+
 ## Highlights
 
 - Codex-oriented registry for Skills, plugin manifests, MCP server config, and
@@ -156,7 +163,7 @@ src/github-comment.ts Opt-in GitHub PR comment publishing
 src/site.ts           Static docs site generation
 src/executor.ts       Safe mock executor
 src/cli.ts            Commander-based CLI
-examples/             Example maintainer workflows and MCP config
+examples/             Core maintainer workflow examples and MCP config
 test/                 Vitest coverage for schemas, discovery, and registry behavior
 ```
 

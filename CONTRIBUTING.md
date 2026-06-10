@@ -37,8 +37,21 @@ npm run dev -- init-policy --preset recommended
 - Do not add real secrets, tokens, private URLs, or production credentials to examples.
 - Prefer safe mock execution. Real script execution should be proposed separately with a clear sandboxing model.
 - When adding example skills, include a realistic `SKILL.md` and keep scripts as harmless local templates.
+- Keep core examples aligned with generic open-source maintainer workflows. See
+  `docs/examples-governance.md` before proposing third-party service or
+  platform-specific examples.
 
 ## Adding a skill example
+
+The main `examples/` tree is for reusable maintainer automation patterns such as
+issue triage, pull request review, release notes, dependency review, security
+review, and repository policy checks.
+
+Third-party service, social platform, vendor API, hosted connector, and
+account-scoped workflow examples are not accepted into the core examples by
+default. They may be reconsidered only if the project later adds a clearly
+separated community or third-party examples area with explicit ownership and
+disclaimers.
 
 Create a directory under `examples/.agents/skills/<name>` with:
 

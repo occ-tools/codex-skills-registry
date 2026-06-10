@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Document example governance so core examples stay focused on generic
+  open-source maintainer workflows and third-party service examples have a clear
+  review boundary.
 - Move standalone demo assets into `demo/standalone-project` so the main repository is the only demo maintenance source.
 - Remove stale planning docs and add a compact documentation index.
 - Add owner-side next steps for external validation, account security, and launch follow-through.
