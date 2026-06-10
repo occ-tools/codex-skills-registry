@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-06-10
 
+- Redesign README for the first stable public release.
+- Stabilize the release-readiness test gate on slower Windows runs.
 - Document example governance so core examples stay focused on generic
   open-source maintainer workflows and third-party service examples have a clear
   review boundary.

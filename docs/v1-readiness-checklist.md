@@ -39,5 +39,5 @@
 - [x] Go-to-market plan is documented.
 - [x] GitHub Pages docs site generation is available through `codex-skills site` and the Pages workflow.
 - [x] PR comment auto-publishing is available through `post-comment: "true"` with narrow `pull-requests: write` permissions.
-- [ ] Add screenshots or copied examples of GitHub annotations and Code Scanning results after the first temporary public demo PRs run.
+- [x] Copied release, PR comment, npm provenance, and CI evidence is captured in `docs/marketplace-evidence.md`.
 - [x] Keep `demo/standalone-project` synchronized with the latest tagged Action; copy it only when public evidence is needed.
