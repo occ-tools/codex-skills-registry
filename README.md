@@ -555,6 +555,7 @@ npm run validate
 npm run lint
 npm run format:check
 npm run pack:check
+npm run market:check
 ```
 
 The GitHub Actions workflow runs lint, format checks, build, test, CLI smoke
@@ -572,6 +573,12 @@ Local release check:
 npm run release:check
 ```
 
+Public release and marketplace readiness check:
+
+```bash
+npm run market:check
+```
+
 Manual npm publish:
 
 ```bash
@@ -582,7 +589,8 @@ npm publish --access public
 `npm publish` also runs `npm run release:check` through `prepublishOnly`, so a
 local publish cannot skip build, tests, and dry-run packaging by accident.
 
-Automated releases run when a semver tag such as `v0.6.3` is pushed.
+Automated releases run when a semver tag such as `v0.6.3` is pushed. The tag
+must match the `package.json` version exactly.
 Configure npm Trusted Publishing for this GitHub Actions workflow instead of a
 long-lived token:
 

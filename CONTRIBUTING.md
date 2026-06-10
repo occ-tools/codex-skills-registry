@@ -72,7 +72,8 @@ npm run validate
 ## Release checklist
 
 - `npm run release:check`
+- `npm run market:check` before public release or marketplace listing updates
 - update `CHANGELOG.md` when one exists
 - confirm the npm package scope is correct for the publishing account
-- create a semver tag such as `v0.4.0`
+- create a semver tag that exactly matches `package.json`, such as `v0.4.0`
 - push the tag to trigger the release workflow, or publish manually with `npm publish --access public`

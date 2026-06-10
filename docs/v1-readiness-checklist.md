@@ -26,6 +26,7 @@
 - [x] CodeQL, dependency review, OpenSSF Scorecard, PR comment, Pages, and release provenance workflows exist.
 - [x] Workflow action references are pinned to full commit SHAs in this repository.
 - [x] npm Trusted Publishing/OIDC release workflow is configured with artifact attestation for the packed tarball.
+- [x] Release tags must match the `package.json` version before npm publishing.
 - [x] `npm audit --audit-level=moderate` reports zero known vulnerabilities.
 - [x] Fixture coverage exists for monorepos, plugin-only projects, external plugin MCP JSON, remote MCP, and path traversal.
 - [x] Generated report, schema, and index artifact workflows exist.
