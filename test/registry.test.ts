@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -66,6 +66,43 @@ describe("SkillsRegistry", () => {
 
     expect(validation.valid).toBe(false);
     expect(validation.issues.map((issue) => issue.path)).toContain("escaped-entry.entryPoint");
+  });
+
+  it("rejects entry points that escape through a directory symlink", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-registry-symlink-"));
+    const skillRoot = path.join(root, "skill");
+    const outsideScripts = path.join(root, "outside-scripts");
+
+    try {
+      await mkdir(skillRoot, { recursive: true });
+      await mkdir(outsideScripts, { recursive: true });
+      await writeFile(path.join(outsideScripts, "run.js"), "export {};\n", "utf8");
+      await symlink(
+        outsideScripts,
+        path.join(skillRoot, "scripts"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      const registry = new SkillsRegistry();
+      registry.registerSkill({
+        name: "symlink-entry",
+        description: "A test skill whose entry point resolves outside through a symlink.",
+        version: "0.1.0",
+        triggers: ["manual"],
+        entryPoint: "scripts/run.js",
+        rootDir: skillRoot,
+        source: "inline",
+        tags: [],
+        metadata: {},
+      });
+
+      const validation = await registry.validateSkillByName("symlink-entry");
+
+      expect(validation.valid).toBe(false);
+      expect(validation.issues.map((issue) => issue.code)).toContain("SKILL_ENTRY_POINT_ESCAPE");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("loads YAML skill config files", async () => {

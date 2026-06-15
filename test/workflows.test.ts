@@ -82,6 +82,39 @@ jobs:
     );
   });
 
+  it("flags jobs that inherit default permissions when only sibling jobs are scoped", () => {
+    const issues = auditGithubWorkflow({
+      name: "partially-scoped",
+      sourcePath: ".github/workflows/partially-scoped.yml",
+      triggers: {
+        pull_request: {},
+      },
+      jobs: [
+        {
+          id: "scoped",
+          permissions: {
+            contents: "read",
+          },
+          line: 7,
+        },
+        {
+          id: "inherited",
+          line: 12,
+        },
+      ],
+      uses: [],
+      runs: [],
+    });
+
+    const permissionIssues = issues.filter(
+      (issue) => issue.code === "WORKFLOW_PERMISSIONS_MISSING",
+    );
+
+    expect(permissionIssues).toHaveLength(1);
+    expect(permissionIssues[0]?.path).toBe("workflows.partially-scoped.jobs.inherited.permissions");
+    expect(permissionIssues[0]?.line).toBe(12);
+  });
+
   it("keeps the composite action wired to tested helper scripts", async () => {
     const action = await readFile(path.join(process.cwd(), "action.yml"), "utf8");
     const dollar = "$";

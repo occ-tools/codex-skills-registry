@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -127,6 +127,28 @@ describe("CLI", () => {
     expect(output).toContain(".agents/skills/bad-skill/SKILL.md:2");
     expect(output).not.toContain(`${process.cwd()}\\test`);
     expect(process.exitCode).toBe(1);
+  });
+
+  it("applies failOnWarnings to full-registry validation", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "codex-skills-warning-policy-"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await mkdir(path.join(tmp, ".agents", "skills", "missing-file"), { recursive: true });
+      await writeFile(
+        path.join(tmp, ".codex-skills-registry.yaml"),
+        "failOnWarnings: true\n",
+        "utf8",
+      );
+
+      await runCli(["node", "codex-skills", "--cwd", tmp, "--no-examples", "validate"]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(output).toContain("SKILL_FILE_MISSING");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 
   it("separates baseline load diagnostics from discovery diagnostics", async () => {
