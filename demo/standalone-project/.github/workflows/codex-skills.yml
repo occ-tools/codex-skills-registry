@@ -20,14 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - id: doctor
-        uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # v0.6.3
+        uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
         continue-on-error: true
         with:
           path: .
           command: doctor
           format: sarif
           policy: .codex-skills-registry.yaml
-      - uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4
+      - uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         if: >-
           always() &&
           steps.doctor.outputs.sarif-path != '' &&
@@ -35,7 +35,7 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: ${{ steps.doctor.outputs.sarif-path }}
-      - uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # v0.6.3
+      - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
         if: >-
           always() &&
           github.event_name == 'pull_request' &&
@@ -55,7 +55,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: wangjiehu/codex-skills-registry@83fd4ff97aa1e608783adeee38c6f982768a4424 # v0.6.3
+      - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
         with:
           path: .
           command: site

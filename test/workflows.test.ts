@@ -150,6 +150,27 @@ jobs:
     expect(workflow).toContain("node dist/npm-pack-output.js npm-pack.json");
     expect(workflow).not.toContain("node <<'NODE'");
   });
+
+  it("keeps standalone demo workflows pinned to the current v1 release commit", async () => {
+    const demoWorkflows = await Promise.all(
+      ["codex-skills.yml", "codex-skills-fork-comment.yml"].map((name) =>
+        readFile(
+          path.join(process.cwd(), "demo", "standalone-project", ".github", "workflows", name),
+          "utf8",
+        ),
+      ),
+    );
+    const currentRelease =
+      "wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1";
+
+    for (const workflow of demoWorkflows) {
+      expect(workflow).toContain(currentRelease);
+      expect(workflow).not.toContain("# v0.6.3");
+    }
+    expect(demoWorkflows[0]).toContain(
+      "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4",
+    );
+  });
 });
 
 async function writeWorkflow(root: string, name: string, content: string): Promise<void> {

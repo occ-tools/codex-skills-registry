@@ -66,8 +66,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: wangjiehu/codex-skills-registry@v1.0.0
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
         with:
           path: .
           command: doctor
@@ -75,8 +75,8 @@ jobs:
           format: text
 ```
 
-For strict supply-chain environments, resolve `v1.0.0` to the release commit SHA
-and pin that SHA in your workflow.
+The example uses the verified v1.0.1 release commit. Review and update pinned
+SHAs intentionally when adopting a newer release.
 
 ## Quick Start
 
@@ -202,14 +202,14 @@ SARIF upload pattern:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@v1.0.0
+  uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
   continue-on-error: true
   with:
     path: .
     command: doctor
     format: sarif
 
-- uses: github/codeql-action/upload-sarif@v4
+- uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
   if: always() && steps.codex-skills.outputs.sarif-path != ''
   with:
     sarif_file: ${{ steps.codex-skills.outputs.sarif-path }}
@@ -226,8 +226,8 @@ permissions:
   pull-requests: write
 
 steps:
-  - uses: actions/checkout@v6
-  - uses: wangjiehu/codex-skills-registry@v1.0.0
+  - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+  - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
     with:
       path: .
       command: pr-comment
@@ -263,7 +263,7 @@ Current behavior is intentionally review-first:
 - The registry parses and validates automation definitions.
 - Findings include source files and best-effort line hints.
 - Real execution, sandboxing, network calls, and tool invocation are out of
-  scope for v1.0.0.
+  scope for the current v1 release.
 
 This project does not prove that a third-party MCP server or service is safe.
 It highlights review-worthy risk before maintainers decide what to trust.
