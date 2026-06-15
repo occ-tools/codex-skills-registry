@@ -5,7 +5,7 @@ import { auditRegistry } from "./audit.js";
 import { discoverProject, parseSkillMarkdown, } from "./discovery.js";
 import { DEFAULT_POLICY, loadRegistryPolicy } from "./policy.js";
 import { CodexSkillSchema, normalizeSkillInput, zodErrorToIssues, } from "./schema.js";
-import { isSubpath, relativePathInside, skillLine } from "./utils.js";
+import { isRealSubpath, isSubpath, relativePathInside, skillLine } from "./utils.js";
 import { discoverGithubWorkflows } from "./workflows.js";
 /**
  * In-memory index for Codex maintainer automation assets. The registry is
@@ -193,6 +193,17 @@ export class SkillsRegistry {
             else {
                 try {
                     await access(entryPath);
+                    if (!(await isRealSubpath(skill.rootDir, entryPath))) {
+                        issues.push({
+                            severity: "error",
+                            code: "SKILL_ENTRY_POINT_ESCAPE",
+                            path: `${skill.name}.entryPoint`,
+                            file: skill.skillFile,
+                            line: skillLine(skill, "entryPoint"),
+                            message: "Configured entryPoint must resolve inside the skill directory.",
+                            help: "Avoid symlinks that resolve the entryPoint outside the skill directory.",
+                        });
+                    }
                 }
                 catch {
                     issues.push({
@@ -386,6 +397,17 @@ export class SkillsRegistry {
                 const skillFile = path.join(skillPath, "SKILL.md");
                 try {
                     await access(skillFile);
+                    if (!(await isRealSubpath(plugin.rootDir, skillFile))) {
+                        this.diagnostics.push({
+                            severity: "error",
+                            code: "PLUGIN_SKILL_PATH_ESCAPE",
+                            path: `${plugin.sourcePath}.skills.${index}.path`,
+                            file: plugin.sourcePath,
+                            message: "Plugin skill path must resolve inside the plugin root.",
+                            help: "Use a plugin-local skill path and avoid symlinks that leave the plugin directory.",
+                        });
+                        continue;
+                    }
                     const parsed = parseSkillMarkdown(await readFile(skillFile, "utf8"));
                     const discoveredName = String(parsed.frontmatter.name ?? "");
                     if (reference.name && reference.name !== discoveredName) {
@@ -446,6 +468,18 @@ export class SkillsRegistry {
             return [];
         }
         try {
+            await access(skillsRoot);
+            if (!(await isRealSubpath(plugin.rootDir, skillsRoot))) {
+                this.diagnostics.push({
+                    severity: "error",
+                    code: "PLUGIN_SKILLS_PATH_ESCAPE",
+                    path: `${plugin.sourcePath}.skills`,
+                    file: plugin.sourcePath,
+                    message: "Plugin skills path must resolve inside the plugin root.",
+                    help: "Use a plugin-local skills path and avoid symlinks that leave the plugin directory.",
+                });
+                return [];
+            }
             const entries = await readdir(skillsRoot, { withFileTypes: true });
             return entries
                 .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())

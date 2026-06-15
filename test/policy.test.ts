@@ -1,4 +1,5 @@
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   formatRegistryPolicyYaml,
@@ -95,9 +96,23 @@ describe("policy", () => {
     expect(yaml).toContain("  - recommended");
     expect(yaml).toContain("requirePinnedWorkflowActions: true");
     expect(yaml).toContain("deniedMcpCommands:");
-    expect(yaml).toContain("baselineFile: codex-skills-baseline.json");
+    expect(yaml).toContain('baselineFile: "codex-skills-baseline.json"');
     expect(yaml).toContain("suppressions:");
     expect(yaml).toContain('  - code: "MCP_SHELL_COMMAND"');
     expect(yaml).toContain("failOnWarnings: false");
+  });
+
+  it("quotes string values so generated policies round-trip safely", () => {
+    const yaml = formatRegistryPolicyYaml({
+      allowedMcpCommands: ["node", "value # with comment"],
+      baselineFile: "reports:baseline.json",
+    });
+    const parsed = parseYaml(yaml) as {
+      allowedMcpCommands: string[];
+      baselineFile: string;
+    };
+
+    expect(parsed.allowedMcpCommands).toEqual(["node", "value # with comment"]);
+    expect(parsed.baselineFile).toBe("reports:baseline.json");
   });
 });

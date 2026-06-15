@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { parse as parseToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
 import { CodexSkillSchema, McpConfigFileSchema, McpServerConfigSchema, PluginManifestSchema, normalizeSkillInput, zodErrorToIssues, } from "./schema.js";
-import { countChar, escapeRegExp, firstExistingPath, isSubpath, pathExists } from "./utils.js";
+import { countChar, escapeRegExp, firstExistingPath, isRealSubpath, isSubpath, pathExists, } from "./utils.js";
 const EMPTY_RESULT = {
     skills: [],
     mcpServers: [],
@@ -330,9 +330,12 @@ export async function discoverPluginsFromRoot(root) {
 export async function discoverPluginMcpServers(pluginDir, manifest, manifestPath, manifestContent) {
     const result = cloneEmptyResult();
     const manifestLines = manifestContent ? manifestContent.split(/\r?\n/) : undefined;
-    const directServers = typeof manifest.mcpServers === "object" && !Array.isArray(manifest.mcpServers)
-        ? manifest.mcpServers
-        : manifest.mcp_servers;
+    const directServers = {
+        ...manifest.mcp_servers,
+        ...(typeof manifest.mcpServers === "object" && !Array.isArray(manifest.mcpServers)
+            ? manifest.mcpServers
+            : {}),
+    };
     for (const [name, config] of Object.entries(directServers ?? {})) {
         const validation = McpServerConfigSchema.safeParse(config);
         if (!validation.success) {
@@ -376,15 +379,34 @@ export async function discoverPluginMcpServers(pluginDir, manifest, manifestPath
         });
         return result;
     }
+    if (!(await isRealSubpath(pluginDir, mcpPath))) {
+        result.diagnostics.push({
+            severity: "error",
+            code: "PLUGIN_MCP_PATH_ESCAPE",
+            path: `${manifestPath}.mcpServers`,
+            file: manifestPath,
+            message: "Plugin mcpServers path must resolve inside the plugin root.",
+            help: "Use a plugin-local mcpServers path and avoid symlinks that leave the plugin directory.",
+        });
+        return result;
+    }
     try {
         const mcpContent = await readFile(mcpPath, "utf8");
         const mcpLines = mcpContent.split(/\r?\n/);
         const parsed = JSON.parse(mcpContent);
-        const parsedRecord = parsed && typeof parsed === "object" && !Array.isArray(parsed)
-            ? parsed
-            : {};
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("Plugin MCP config must contain a JSON object.");
+        }
+        const parsedRecord = parsed;
         const wrapped = "mcp_servers" in parsedRecord ? McpConfigFileSchema.safeParse(parsed) : undefined;
-        const serverMap = wrapped?.success ? wrapped.data.mcp_servers : parsedRecord;
+        if (wrapped && !wrapped.success) {
+            result.diagnostics.push(...zodErrorToIssues(wrapped.error, mcpPath).map((issue) => ({
+                ...issue,
+                file: mcpPath,
+            })));
+            return result;
+        }
+        const serverMap = wrapped ? wrapped.data.mcp_servers : parsedRecord;
         for (const [name, config] of Object.entries(serverMap)) {
             const validation = McpServerConfigSchema.safeParse(config);
             if (!validation.success) {

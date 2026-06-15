@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -107,6 +107,108 @@ description: Validate a skill file that was saved with a byte order mark.
 
     expect(result.mcpServers[0]?.line).toBe(5);
     expect(result.mcpServers[0]?.fieldLines?.command).toBe(6);
+  });
+
+  it("discovers both modern and legacy inline plugin MCP server fields", async () => {
+    const result = await discoverPluginMcpServers(
+      process.cwd(),
+      {
+        name: "mixed-plugin",
+        version: "0.1.0",
+        mcpServers: {
+          modern_docs: {
+            command: "node",
+          },
+        },
+        mcp_servers: {
+          legacy_docs: {
+            command: "node",
+          },
+        },
+      },
+      "plugin.json",
+    );
+
+    expect(result.mcpServers.map((server) => server.name).sort()).toEqual([
+      "legacy_docs",
+      "modern_docs",
+    ]);
+  });
+
+  it("reports malformed wrapped plugin MCP config files", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-plugin-mcp-invalid-"));
+    const mcpPath = path.join(root, "mcp.json");
+
+    try {
+      await writeFile(
+        mcpPath,
+        JSON.stringify({
+          mcp_servers: {
+            invalid: {
+              url: "not a url",
+            },
+          },
+        }),
+        "utf8",
+      );
+
+      const result = await discoverPluginMcpServers(
+        root,
+        {
+          name: "invalid-mcp-plugin",
+          version: "0.1.0",
+          mcpServers: "./mcp.json",
+          mcp_servers: {},
+        },
+        "plugin.json",
+      );
+
+      expect(result.mcpServers).toHaveLength(0);
+      expect(result.diagnostics[0]?.path).toContain("mcp_servers.invalid.url");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects plugin MCP paths that escape through a directory symlink", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-plugin-mcp-symlink-"));
+    const pluginRoot = path.join(root, "plugin");
+    const outside = path.join(root, "outside");
+
+    try {
+      await mkdir(pluginRoot, { recursive: true });
+      await mkdir(outside, { recursive: true });
+      await writeFile(
+        path.join(outside, "mcp.json"),
+        JSON.stringify({
+          docs: {
+            command: "node",
+          },
+        }),
+        "utf8",
+      );
+      await symlink(
+        outside,
+        path.join(pluginRoot, "linked"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      const result = await discoverPluginMcpServers(
+        pluginRoot,
+        {
+          name: "symlink-mcp-plugin",
+          version: "0.1.0",
+          mcpServers: "./linked/mcp.json",
+          mcp_servers: {},
+        },
+        "plugin.json",
+      );
+
+      expect(result.mcpServers).toHaveLength(0);
+      expect(result.diagnostics.map((issue) => issue.code)).toContain("PLUGIN_MCP_PATH_ESCAPE");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("skips skills disabled by Codex skills.config", async () => {
