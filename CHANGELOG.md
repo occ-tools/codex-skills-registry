@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 - 2026-06-15
+
+- Fix full-registry validation so `failOnWarnings` is applied consistently.
+- Detect GitHub Actions jobs that inherit repository-default token permissions.
+- Block Skill and plugin paths that escape trusted roots through symlinks or junctions.
+- Merge modern and legacy plugin MCP declarations and report malformed external MCP JSON.
+- Quote generated policy YAML string values for reliable round-trip parsing.
+- Upgrade `esbuild` to `0.28.1` to address GHSA-gv7w-rqvm-qjhr and
+  GHSA-g7r4-m6w7-qqqr.
+
 ## 1.0.0 - 2026-06-10
 
 - Redesign README for the first stable public release.
