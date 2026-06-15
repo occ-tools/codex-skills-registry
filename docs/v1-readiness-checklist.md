@@ -25,6 +25,7 @@
 - [x] CI runs build, tests, CLI smoke checks, schema smoke checks, and Action smoke checks.
 - [x] CodeQL, dependency review, OpenSSF Scorecard, PR comment, Pages, and release provenance workflows exist.
 - [x] Workflow action references are pinned to full commit SHAs in this repository.
+- [x] Repository Actions settings require external actions to use full commit SHAs.
 - [x] npm Trusted Publishing/OIDC release workflow is configured with artifact attestation for the packed tarball.
 - [x] Release tags must match the `package.json` version before npm publishing.
 - [x] `npm audit --audit-level=moderate` reports zero known vulnerabilities.
