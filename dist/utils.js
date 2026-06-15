@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, realpath } from "node:fs/promises";
 import path from "node:path";
 export async function pathExists(filePath) {
     try {
@@ -20,6 +20,18 @@ export async function firstExistingPath(candidates) {
 export function isSubpath(root, candidate) {
     const relative = path.relative(path.resolve(root), path.resolve(candidate));
     return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+export async function isRealSubpath(root, candidate) {
+    if (!isSubpath(root, candidate)) {
+        return false;
+    }
+    try {
+        const [realRoot, realCandidate] = await Promise.all([realpath(root), realpath(candidate)]);
+        return isSubpath(realRoot, realCandidate);
+    }
+    catch {
+        return false;
+    }
 }
 export function relativePathInside(root, candidate) {
     const relative = path.relative(path.resolve(root), path.resolve(candidate));

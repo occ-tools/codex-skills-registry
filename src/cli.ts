@@ -370,7 +370,6 @@ async function handleValidate(
       ...diagnostics.activeIssues,
       ...issues,
     ];
-    const hasErrors = allIssues.some((issue) => issue.severity === "error");
 
     if (outputOptions.githubAnnotations) {
       emitGithubAnnotations(allIssues, options.cwd);
@@ -425,7 +424,7 @@ async function handleValidate(
       }
     }
 
-    if (hasErrors) {
+    if (shouldFail(allIssues, registry.getPolicy())) {
       process.exitCode = 1;
     }
     return;

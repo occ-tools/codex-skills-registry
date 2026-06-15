@@ -201,7 +201,7 @@ export function formatRegistryPolicyYaml(policy) {
     appendBooleanPolicyLine(lines, "requirePluginSkillPaths", policy.requirePluginSkillPaths);
     appendBooleanPolicyLine(lines, "failOnWarnings", policy.failOnWarnings);
     if (policy.baselineFile) {
-        lines.push(`baselineFile: ${policy.baselineFile}`);
+        lines.push(`baselineFile: ${JSON.stringify(policy.baselineFile)}`);
     }
     if (policy.suppressions && policy.suppressions.length > 0) {
         lines.push("suppressions:");
@@ -257,7 +257,7 @@ function appendStringListPolicyLines(lines, key, value) {
     }
     lines.push(`${key}:`);
     for (const item of value) {
-        lines.push(`  - ${item}`);
+        lines.push(`  - ${JSON.stringify(item)}`);
     }
 }
 function appendOptionalNestedLine(lines, key, value) {

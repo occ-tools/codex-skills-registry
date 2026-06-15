@@ -43,9 +43,7 @@ export async function discoverGithubWorkflows(cwd) {
 export function auditGithubWorkflow(workflow, options = {}) {
     const issues = [];
     const basePath = `workflows.${workflow.name}`;
-    const hasAnyPermissions = workflow.permissions !== undefined ||
-        workflow.jobs.some((job) => job.permissions !== undefined);
-    if (!hasAnyPermissions) {
+    if (workflow.permissions === undefined && workflow.jobs.length === 0) {
         issues.push({
             severity: "warning",
             code: "WORKFLOW_PERMISSIONS_MISSING",
@@ -54,6 +52,22 @@ export function auditGithubWorkflow(workflow, options = {}) {
             message: "Workflow does not declare explicit GITHUB_TOKEN permissions.",
             help: "Add top-level or job-level permissions with the least privileges needed.",
         });
+    }
+    if (workflow.permissions === undefined) {
+        for (const job of workflow.jobs) {
+            if (job.permissions !== undefined) {
+                continue;
+            }
+            issues.push({
+                severity: "warning",
+                code: "WORKFLOW_PERMISSIONS_MISSING",
+                path: `${basePath}.jobs.${job.id}.permissions`,
+                file: workflow.sourcePath,
+                line: job.line,
+                message: `Workflow job '${job.id}' inherits repository-default GITHUB_TOKEN permissions.`,
+                help: "Add least-privilege permissions at the workflow level or explicitly on this job.",
+            });
+        }
     }
     for (const issue of auditWorkflowPermissions(workflow.permissions, `${basePath}.permissions`, workflow.sourcePath)) {
         issues.push(issue);
