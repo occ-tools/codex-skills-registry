@@ -12,7 +12,7 @@ Refreshed on 2026-06-16 after the v1.0.1 release and dependency maintenance.
 
 ```text
 17 test files passed
-97 tests passed
+98 tests passed
 npm pack --dry-run completed
 npm audit --audit-level=moderate found 0 vulnerabilities
 ```

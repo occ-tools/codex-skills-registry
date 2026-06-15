@@ -170,6 +170,21 @@ jobs:
     expect(demoWorkflows[0]).toContain(
       "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4",
     );
+    expect(demoWorkflows[0]).toContain(
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+    );
+  });
+
+  it("allows Dependabot to propose GitHub Actions major upgrades", async () => {
+    const dependabot = await readFile(
+      path.join(process.cwd(), ".github", "dependabot.yml"),
+      "utf8",
+    );
+    const githubActionsConfig = dependabot.split("- package-ecosystem: github-actions")[1] ?? "";
+
+    expect(dependabot).toContain("- package-ecosystem: npm");
+    expect(dependabot).toContain("version-update:semver-major");
+    expect(githubActionsConfig).not.toContain("version-update:semver-major");
   });
 });
 
