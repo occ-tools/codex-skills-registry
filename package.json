@@ -42,6 +42,13 @@
       "import": "./dist/cli.js"
     }
   },
+  "typesVersions": {
+    "*": {
+      "cli": [
+        "./dist/cli.d.ts"
+      ]
+    }
+  },
   "bin": {
     "codex-skills": "dist/cli.js"
   },
