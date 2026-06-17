@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: target
           persist-credentials: false
-      - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
+      - uses: wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2
         with:
           path: target
           command: pr-comment

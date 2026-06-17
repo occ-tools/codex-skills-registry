@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
+      - uses: wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2
         with:
           path: .
           command: doctor
@@ -75,7 +75,7 @@ jobs:
           format: text
 ```
 
-The example uses the verified v1.0.1 release commit. Review and update pinned
+The example uses the verified v1.0.2 release commit. Review and update pinned
 SHAs intentionally when adopting a newer release.
 
 ## Quick Start
@@ -202,7 +202,7 @@ SARIF upload pattern:
 
 ```yaml
 - id: codex-skills
-  uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
+  uses: wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2
   continue-on-error: true
   with:
     path: .
@@ -227,7 +227,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-  - uses: wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1
+  - uses: wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2
     with:
       path: .
       command: pr-comment

@@ -161,7 +161,7 @@ jobs:
       ),
     );
     const currentRelease =
-      "wangjiehu/codex-skills-registry@6dc46f85ea48af3be389bc8ca0868f19de8502cb # v1.0.1";
+      "wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2";
 
     for (const workflow of demoWorkflows) {
       expect(workflow).toContain(currentRelease);
