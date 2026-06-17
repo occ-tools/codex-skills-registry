@@ -240,6 +240,8 @@ write-token comment publishing in a trusted `pull_request_target` workflow. See
 
 ## SDK
 
+The SDK is ESM-only. CommonJS consumers should load it with dynamic `import()`.
+
 ```ts
 import { SkillsRegistry, executeMockSkill } from "@wangjiehu/codex-skills-registry";
 
