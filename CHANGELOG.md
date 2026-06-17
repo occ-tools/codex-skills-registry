@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2 - 2026-06-17
+
+- Add a `typesVersions` mapping so legacy TypeScript resolution can find the
+  `./cli` subpath declarations.
+- Document that the SDK is ESM-only and CommonJS consumers should use dynamic
+  `import()`.
+- Refresh repository maintenance workflows for Node 24-compatible GitHub
+  Actions majors.
+
 ## 1.0.1 - 2026-06-15
 
 - Fix full-registry validation so `failOnWarnings` is applied consistently.
