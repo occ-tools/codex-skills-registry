@@ -234,8 +234,9 @@ steps:
       post-comment: "true"
 ```
 
-For public fork PRs, keep required validation on `pull_request` and isolate
-write-token comment publishing in a trusted `pull_request_target` workflow. See
+For public fork PRs, keep analysis read-only on `pull_request`. If comments are
+required, publish only escaped analysis artifacts from a trusted `workflow_run`
+workflow; never execute or source the downloaded artifact. See
 [docs/fork-pr-validation.md](docs/fork-pr-validation.md).
 
 ## SDK

@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { applyIssuePolicyFilters, createIssueBaseline, issueFingerprint } from "../src/issues.js";
+import {
+  applyIssuePolicyFilters,
+  createIssueBaseline,
+  issueCode,
+  issueFingerprint,
+} from "../src/issues.js";
 import type { RegistryPolicy } from "../src/policy.js";
 import type { ValidationIssue } from "../src/schema.js";
 
@@ -181,5 +186,15 @@ describe("issue filters", () => {
     expect(singleSegment.activeIssues).toHaveLength(1);
     expect(multiSegment.suppressedIssues).toHaveLength(1);
     expect(singleCharacter.suppressedIssues).toHaveLength(1);
+  });
+
+  it("creates issue codes in linear time for long separator runs", () => {
+    const code = issueCode({
+      severity: "warning",
+      path: `C:\\${"_".repeat(100_000)}alpha${"_".repeat(100_000)}beta`,
+      message: "Long path.",
+    });
+
+    expect(code).toBe("REGISTRY_ALPHA_BETA");
   });
 });

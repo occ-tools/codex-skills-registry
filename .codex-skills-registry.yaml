@@ -9,8 +9,3 @@ allowedRemoteMcpHosts:
 requireExplicitMcpToolPolicy: true
 requirePluginSkillPaths: true
 failOnWarnings: false
-suppressions:
-  - code: "WORKFLOW_PULL_REQUEST_TARGET"
-    file: ".github/workflows/registry-pr-comment.yml"
-    reason: "PR comments use trusted base action code and a non-credentialed PR checkout."
-    expiresOn: "2027-06-04"

@@ -4,8 +4,8 @@ This directory is a copy-ready demo repository template for
 `@wangjiehu/codex-skills-registry`.
 
 It demonstrates the product's clean path, baseline-ready configuration, SARIF
-upload, static site artifact, same-repo pull request comment, and fork-safe pull
-request comment workflows in GitHub Actions.
+upload, static site artifact, and same-repository pull request comments in
+GitHub Actions.
 
 ## What to try locally
 
@@ -41,7 +41,6 @@ The included workflows run registry doctor, upload SARIF, publish a PR comment,
 and generate a Pages-ready static site artifact.
 
 Same-repo pull requests publish comments from the normal `pull_request`
-workflow. Forked pull requests use the separate `codex-skills-fork-comment`
-workflow, which runs on `pull_request_target`, checks out fork contents without
-credentials, and uses a registry action reference pinned to a published release
-commit.
+workflow. Forked pull requests keep read-only validation but do not receive a
+write-token comment from this minimal template. Use the product repository's
+trusted `workflow_run` publishing pattern when fork comments are required.
