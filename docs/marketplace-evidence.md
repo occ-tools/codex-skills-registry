@@ -4,15 +4,15 @@ This file records copied release-readiness evidence for the public package and
 GitHub Action listing. It is intentionally text-based so maintainers can review
 it in Git, without relying on screenshots that go stale quickly.
 
-Refreshed on 2026-06-17 after the v1.0.2 release and dependency maintenance.
+Refreshed on 2026-06-18 after the v1.0.3 security release.
 
 ## Local Gates
 
 `npm run market:check`
 
 ```text
-17 test files passed
-98 tests passed
+18 test files passed
+102 tests passed
 npm pack --dry-run completed
 npm audit --audit-level=moderate found 0 vulnerabilities
 ```
@@ -29,7 +29,7 @@ npx codex-skills --help
 Result:
 
 ```text
-1.0.2
+1.0.3
 Usage: codex-skills [options] [command]
 
 Validate, index, and mock-run Codex Skills, plugins, MCP configs, and workflow
@@ -42,11 +42,12 @@ Latest verified main-branch checks:
 
 | Workflow | Result | Evidence |
 | --- | --- | --- |
-| validate | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27698976063 |
-| codeql | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27698975650 |
-| pages | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27698975597 |
-| registry-artifacts | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27698975545 |
-| release | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27699018216 |
+| validate | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759579637 |
+| codeql | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759579662 |
+| pages | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759579623 |
+| registry-artifacts | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759579654 |
+| scorecard | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759771438 |
+| release | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759708254 |
 
 The validate workflow covered Node.js 20, 22, and 24 on Ubuntu, Windows, and
 macOS, plus reusable Action smoke tests for doctor, schema, report, PR comment,
@@ -54,10 +55,10 @@ baseline, and site commands.
 
 ## Pull Request Comment Evidence
 
-The registry PR comment workflow posted a no-findings summary on a public pull
-request:
+The split PR analysis and trusted `workflow_run` publisher posted an escaped
+no-findings summary on a public pull request:
 
-https://github.com/wangjiehu/codex-skills-registry/pull/8#issuecomment-4709962563
+https://github.com/wangjiehu/codex-skills-registry/pull/16#issuecomment-4739280999
 
 Copied summary:
 
@@ -66,25 +67,25 @@ No active findings
 Skills: 3
 MCP servers: 3
 Plugins: 1
-Workflows: 8
+Workflows: 9
 Errors: 0
 Warnings: 0
-Suppressed: 1
+Suppressed: 0
 Baseline: 0
 ```
 
 ## npm Provenance Evidence
 
-The published `1.0.2` package includes npm provenance metadata. The release
+The published `1.0.3` package includes npm provenance metadata. The release
 workflow published through Trusted Publishing/OIDC after verifying that the
 release tag matched the package version and attesting the packed tarball.
 
-Copied `npm view @wangjiehu/codex-skills-registry@1.0.2 dist --json` fields:
+Copied `npm view @wangjiehu/codex-skills-registry@1.0.3 dist --json` fields:
 
 ```json
 {
   "attestations": {
-    "url": "https://registry.npmjs.org/-/npm/v1/attestations/@wangjiehu%2fcodex-skills-registry@1.0.2",
+    "url": "https://registry.npmjs.org/-/npm/v1/attestations/@wangjiehu%2fcodex-skills-registry@1.0.3",
     "provenance": {
       "predicateType": "https://slsa.dev/provenance/v1"
     }

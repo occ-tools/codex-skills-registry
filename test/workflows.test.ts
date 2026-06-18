@@ -172,7 +172,7 @@ jobs:
       "utf8",
     );
     const currentRelease =
-      "wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2";
+      "wangjiehu/codex-skills-registry@dbab3b515c73dd028f5b35bcc22547077601d7a6 # v1.0.3";
 
     expect(demoWorkflow).toContain(currentRelease);
     expect(demoWorkflow).not.toContain("# v0.6.3");
