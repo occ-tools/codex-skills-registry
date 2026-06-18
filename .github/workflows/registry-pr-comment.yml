@@ -1,15 +1,15 @@
-name: registry-pr-comment
+name: registry-pr-analysis
 
 on:
-  pull_request_target:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  comment:
-    name: publish registry summary
+  analyze:
+    name: generate registry summary
     runs-on: ubuntu-latest
     steps:
       - name: Checkout trusted action code
@@ -17,6 +17,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: action
+          persist-credentials: false
       - name: Checkout pull request contents
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -24,9 +25,16 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: target
           persist-credentials: false
-      - uses: ./action
+      - id: summary
+        uses: ./action
         with:
           path: target
           include-examples: "true"
           command: pr-comment
-          post-comment: "true"
+      - name: Upload registry summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: registry-pr-comment-${{ github.event.pull_request.number }}
+          path: ${{ steps.summary.outputs.comment-path }}
+          if-no-files-found: error
+          retention-days: 7

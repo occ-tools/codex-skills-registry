@@ -65,11 +65,48 @@ export function createSarifLog(issues, options = {}) {
     };
 }
 function ruleIdForIssue(ruleName) {
-    return (ruleName
-        .replace(/^[A-Za-z]:[\\/]/, "")
-        .replace(/[^A-Za-z0-9._-]+/g, ".")
-        .replace(/^\.+|\.+$/g, "")
-        .slice(0, 120) || "registry.issue");
+    const source = stripWindowsDrivePrefix(ruleName);
+    const result = [];
+    let pendingSeparator = false;
+    for (const char of source) {
+        if (isSarifRuleIdCharacter(char)) {
+            if (pendingSeparator && result.length > 0) {
+                result.push(".");
+            }
+            if (char !== "." || result.length > 0) {
+                result.push(char);
+            }
+            pendingSeparator = false;
+            continue;
+        }
+        pendingSeparator = result.length > 0;
+    }
+    while (result.at(-1) === ".") {
+        result.pop();
+    }
+    return result.join("").slice(0, 120) || "registry.issue";
+}
+function stripWindowsDrivePrefix(value) {
+    if (value.length >= 3 &&
+        isAsciiLetter(value[0] ?? "") &&
+        value[1] === ":" &&
+        (value[2] === "\\" || value[2] === "/")) {
+        return value.slice(3);
+    }
+    return value;
+}
+function isSarifRuleIdCharacter(char) {
+    const code = char.charCodeAt(0);
+    return ((code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        char === "." ||
+        char === "_" ||
+        char === "-");
+}
+function isAsciiLetter(char) {
+    const code = char.charCodeAt(0);
+    return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 function ruleNameForIssue(issue, cwd) {
     if (!issue.file || !cwd || !path.isAbsolute(issue.file)) {

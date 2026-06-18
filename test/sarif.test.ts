@@ -67,4 +67,26 @@ describe("sarif", () => {
     expect(rule?.name).toBe(".agents/skills/bad-skill/SKILL.md.name");
     expect(rule?.id).toBe("agents.skills.bad-skill.SKILL.md.name");
   });
+
+  it("creates bounded rule ids in linear time for long separator runs", () => {
+    const log = createSarifLog([
+      {
+        severity: "warning",
+        path: `C:\\${".".repeat(100_000)}alpha${" ".repeat(100_000)}beta`,
+        message: "Long path.",
+      },
+    ]) as {
+      runs: Array<{
+        tool: {
+          driver: {
+            rules: Array<{
+              id: string;
+            }>;
+          };
+        };
+      }>;
+    };
+
+    expect(log.runs[0]?.tool.driver.rules[0]?.id).toBe("alpha.beta");
+  });
 });

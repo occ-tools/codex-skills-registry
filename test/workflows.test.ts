@@ -127,18 +127,26 @@ jobs:
     expect(action).toContain('node dist/action-summary.js "$summary_file"');
   });
 
-  it("keeps PR comments on trusted action code while scanning pull request contents", async () => {
-    const workflow = await readFile(
+  it("separates read-only PR analysis from trusted comment publishing", async () => {
+    const analysisWorkflow = await readFile(
       path.join(process.cwd(), ".github", "workflows", "registry-pr-comment.yml"),
       "utf8",
     );
+    const publishWorkflow = await readFile(
+      path.join(process.cwd(), ".github", "workflows", "registry-pr-comment-publish.yml"),
+      "utf8",
+    );
 
-    expect(workflow).toContain("pull_request_target:");
-    expect(workflow).toContain("path: action");
-    expect(workflow).toContain("path: target");
-    expect(workflow).toContain("persist-credentials: false");
-    expect(workflow).toContain("uses: ./action");
-    expect(workflow).toContain("path: target");
+    expect(analysisWorkflow).toContain("pull_request:");
+    expect(analysisWorkflow).not.toContain("pull_request_target:");
+    expect(analysisWorkflow).toContain("path: action");
+    expect(analysisWorkflow).toContain("path: target");
+    expect(analysisWorkflow).toContain("persist-credentials: false");
+    expect(analysisWorkflow).toContain("actions/upload-artifact@");
+    expect(publishWorkflow).toContain("workflow_run:");
+    expect(publishWorkflow).toContain("actions/download-artifact@");
+    expect(publishWorkflow).toContain("publish-comment-file.js");
+    expect(publishWorkflow).not.toContain("github.event.pull_request.head.sha");
   });
 
   it("uses the typed npm pack parser in the release workflow", async () => {
@@ -152,25 +160,27 @@ jobs:
   });
 
   it("keeps standalone demo workflows pinned to the current v1 release commit", async () => {
-    const demoWorkflows = await Promise.all(
-      ["codex-skills.yml", "codex-skills-fork-comment.yml"].map((name) =>
-        readFile(
-          path.join(process.cwd(), "demo", "standalone-project", ".github", "workflows", name),
-          "utf8",
-        ),
+    const demoWorkflow = await readFile(
+      path.join(
+        process.cwd(),
+        "demo",
+        "standalone-project",
+        ".github",
+        "workflows",
+        "codex-skills.yml",
       ),
+      "utf8",
     );
     const currentRelease =
       "wangjiehu/codex-skills-registry@69269b7c94f37ddd137492eb5eb94cf7e79a624a # v1.0.2";
 
-    for (const workflow of demoWorkflows) {
-      expect(workflow).toContain(currentRelease);
-      expect(workflow).not.toContain("# v0.6.3");
-    }
-    expect(demoWorkflows[0]).toContain(
+    expect(demoWorkflow).toContain(currentRelease);
+    expect(demoWorkflow).not.toContain("# v0.6.3");
+    expect(demoWorkflow).not.toContain("pull_request_target:");
+    expect(demoWorkflow).toContain(
       "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4",
     );
-    expect(demoWorkflows[0]).toContain(
+    expect(demoWorkflow).toContain(
       "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
     );
   });

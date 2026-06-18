@@ -30,8 +30,10 @@ and a possible secret literal.
 
 `standalone-project/` is a copy-ready repository template for GitHub Actions
 demos. It contains a clean default project, pinned registry Action workflows,
-SARIF upload, PR comment publishing, a static site artifact workflow, and a
-fork-safe `pull_request_target` comment pattern.
+SARIF upload, same-repository PR comment publishing, and a static site artifact
+workflow. Fork pull requests retain read-only validation; repositories that
+need fork comments should add the trusted `workflow_run` pattern documented in
+`docs/fork-pr-validation.md`.
 
 There is no separate companion demo repository to keep synchronized. Copy this
 directory only when GitHub's real pull request and fork permission boundaries

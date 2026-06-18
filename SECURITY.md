@@ -7,10 +7,16 @@ not execute community-contributed skill scripts.
 
 Security fixes target the latest released minor version.
 
+| Version | Supported |
+| --- | --- |
+| Latest npm release | Yes |
+| Older releases | No |
+
 ## Reporting a vulnerability
 
-Please open a private security advisory on GitHub or contact the maintainers
-privately if GitHub advisories are not available.
+Please open a
+[private GitHub security advisory](https://github.com/wangjiehu/codex-skills-registry/security/advisories/new).
+Do not open a public issue for an undisclosed vulnerability.
 
 Include:
 
@@ -18,6 +24,13 @@ Include:
 - steps to reproduce
 - impact
 - whether the issue requires a malicious skill, MCP config, plugin manifest, or CLI input
+
+## Response targets
+
+- Initial acknowledgement: within 3 business days.
+- Initial impact assessment: within 7 business days.
+- Status updates: at least weekly while remediation is active.
+- Disclosure: coordinated after a fix is available, with credit when requested.
 
 ## Security model
 

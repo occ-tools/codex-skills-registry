@@ -139,11 +139,37 @@ function globPatternToRegexSource(pattern) {
     return source;
 }
 function slugifyIssueCode(value) {
-    return (value
-        .replace(/^[A-Za-z]:[\\/]/, "")
-        .replace(/[^A-Za-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .toUpperCase()
-        .slice(0, 80) || "ISSUE");
+    const source = stripWindowsDrivePrefix(value);
+    const result = [];
+    let pendingSeparator = false;
+    for (const char of source) {
+        if (isAsciiAlphaNumeric(char)) {
+            if (pendingSeparator && result.length > 0) {
+                result.push("_");
+            }
+            result.push(char.toUpperCase());
+            pendingSeparator = false;
+            continue;
+        }
+        pendingSeparator = result.length > 0;
+    }
+    return result.join("").slice(0, 80) || "ISSUE";
+}
+function stripWindowsDrivePrefix(value) {
+    if (value.length >= 3 &&
+        isAsciiLetter(value[0] ?? "") &&
+        value[1] === ":" &&
+        (value[2] === "\\" || value[2] === "/")) {
+        return value.slice(3);
+    }
+    return value;
+}
+function isAsciiAlphaNumeric(char) {
+    const code = char.charCodeAt(0);
+    return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+function isAsciiLetter(char) {
+    const code = char.charCodeAt(0);
+    return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 //# sourceMappingURL=issues.js.map
