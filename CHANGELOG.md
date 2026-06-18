@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.3 - 2026-06-18
+
+- Replace two CodeQL-flagged identifier regular expressions with linear
+  scanners to prevent polynomial-time behavior on untrusted long inputs.
+- Split pull request analysis from write-token comment publishing using a
+  read-only `pull_request` workflow and a trusted `workflow_run` publisher.
+- Sanitize downloaded comment artifacts before publishing and narrow CodeQL
+  write permissions to the analysis job.
+- Strengthen the security policy with a private advisory link and response
+  targets.
+
 ## 1.0.2 - 2026-06-17
 
 - Add a `typesVersions` mapping so legacy TypeScript resolution can find the
