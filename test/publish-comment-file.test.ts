@@ -1,5 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatUntrustedCommentArtifact } from "../src/publish-comment-file.js";
+import {
+  formatUntrustedCommentArtifact,
+  readCommentArtifactPrefix,
+} from "../src/publish-comment-file.js";
 
 describe("workflow-run comment publishing", () => {
   it("renders untrusted artifacts as escaped preformatted text", () => {
@@ -15,9 +21,25 @@ describe("workflow-run comment publishing", () => {
   });
 
   it("truncates oversized artifacts before publishing", () => {
-    const comment = formatUntrustedCommentArtifact("x".repeat(60_000));
+    const comment = formatUntrustedCommentArtifact("&😀".repeat(60_000));
 
     expect(comment).toContain("Output truncated before publishing.");
-    expect(comment.length).toBeLessThan(51_000);
+    expect(Buffer.byteLength(comment, "utf8")).toBeLessThan(51_000);
+  });
+
+  it("reads only a bounded prefix from oversized artifacts", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-comment-artifact-"));
+    const artifactPath = path.join(root, "comment.md");
+
+    try {
+      await writeFile(artifactPath, "x".repeat(100_000), "utf8");
+
+      const artifact = await readCommentArtifactPrefix(artifactPath);
+
+      expect(Buffer.byteLength(artifact.source, "utf8")).toBeLessThanOrEqual(64 * 1024);
+      expect(artifact.truncated).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

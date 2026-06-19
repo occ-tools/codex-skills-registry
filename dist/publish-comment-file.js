@@ -1,16 +1,36 @@
-import { readFile } from "node:fs/promises";
+import { Buffer } from "node:buffer";
+import { open } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { publishPullRequestComment } from "./github-comment.js";
-const MAX_ARTIFACT_LENGTH = 50_000;
-export function formatUntrustedCommentArtifact(source) {
-    const normalized = source.replace(/\r\n?/g, "\n").slice(0, MAX_ARTIFACT_LENGTH);
-    const escaped = normalized
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/@/g, "&#64;");
-    const truncated = source.length > MAX_ARTIFACT_LENGTH;
+const MAX_ARTIFACT_READ_BYTES = 64 * 1024;
+const MAX_ESCAPED_PAYLOAD_BYTES = 50_000;
+export async function readCommentArtifactPrefix(filePath) {
+    const file = await open(filePath, "r");
+    try {
+        const fileSize = (await file.stat()).size;
+        const bytesToRead = Math.min(fileSize, MAX_ARTIFACT_READ_BYTES);
+        const buffer = Buffer.alloc(bytesToRead);
+        let offset = 0;
+        while (offset < bytesToRead) {
+            const { bytesRead } = await file.read(buffer, offset, bytesToRead - offset, offset);
+            if (bytesRead === 0) {
+                break;
+            }
+            offset += bytesRead;
+        }
+        return {
+            source: buffer.subarray(0, offset).toString("utf8"),
+            truncated: fileSize > MAX_ARTIFACT_READ_BYTES,
+        };
+    }
+    finally {
+        await file.close();
+    }
+}
+export function formatUntrustedCommentArtifact(source, options = {}) {
+    const escaped = escapeArtifactPayload(source.replace(/\r\n?/g, "\n"));
+    const truncated = options.truncated === true || escaped.truncated;
     return [
         "## Codex Skills Registry",
         "",
@@ -19,16 +39,40 @@ export function formatUntrustedCommentArtifact(source) {
         "<details>",
         "<summary>Registry summary</summary>",
         "",
-        `<pre>${escaped}</pre>`,
+        `<pre>${escaped.value}</pre>`,
         ...(truncated ? ["", "_Output truncated before publishing._"] : []),
         "",
         "</details>",
     ].join("\n");
 }
+function escapeArtifactPayload(source) {
+    const parts = [];
+    let bytes = 0;
+    for (const char of source) {
+        const escaped = char === "&"
+            ? "&amp;"
+            : char === "<"
+                ? "&lt;"
+                : char === ">"
+                    ? "&gt;"
+                    : char === "@"
+                        ? "&#64;"
+                        : char;
+        const escapedBytes = Buffer.byteLength(escaped, "utf8");
+        if (bytes + escapedBytes > MAX_ESCAPED_PAYLOAD_BYTES) {
+            return { value: parts.join(""), truncated: true };
+        }
+        parts.push(escaped);
+        bytes += escapedBytes;
+    }
+    return { value: parts.join(""), truncated: false };
+}
 export async function publishCommentArtifact(filePath, environment = process.env) {
-    const source = await readFile(filePath, "utf8");
+    const artifact = await readCommentArtifactPrefix(filePath);
     const result = await publishPullRequestComment({
-        body: formatUntrustedCommentArtifact(source),
+        body: formatUntrustedCommentArtifact(artifact.source, {
+            truncated: artifact.truncated,
+        }),
         token: environment.GITHUB_TOKEN,
         repository: environment.GITHUB_REPOSITORY,
         pullRequestNumber: environment.REGISTRY_GITHUB_PR_NUMBER,

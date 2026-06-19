@@ -123,6 +123,8 @@ jobs:
     expect(action).toContain(
       `text_args=("${dollar}{base_args[@]}" --format text --github-annotations)`,
     );
+    expect(action).toContain('output_path="$REGISTRY_INPUT_OUTPUT_DIRECTORY"');
+    expect(action).toContain('summary_file="$output_path/codex-skills-registry-summary.json"');
     expect(action).toContain(`write_issue_outputs pr-comment "${dollar}{strict_args[@]}"`);
     expect(action).toContain('node dist/action-summary.js "$summary_file"');
   });
@@ -141,7 +143,11 @@ jobs:
     expect(analysisWorkflow).not.toContain("pull_request_target:");
     expect(analysisWorkflow).toContain("path: action");
     expect(analysisWorkflow).toContain("path: target");
+    expect(analysisWorkflow).toContain("output-directory: result");
     expect(analysisWorkflow).toContain("persist-credentials: false");
+    expect(analysisWorkflow).toContain(
+      "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
+    );
     expect(analysisWorkflow).toContain("actions/upload-artifact@");
     expect(publishWorkflow).toContain("workflow_run:");
     expect(publishWorkflow).toContain("actions/download-artifact@");
@@ -177,6 +183,9 @@ jobs:
     expect(demoWorkflow).toContain(currentRelease);
     expect(demoWorkflow).not.toContain("# v0.6.3");
     expect(demoWorkflow).not.toContain("pull_request_target:");
+    expect(demoWorkflow).toContain(
+      "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
+    );
     expect(demoWorkflow).toContain(
       "github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4",
     );
