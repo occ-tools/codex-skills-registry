@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.4 - 2026-06-20
+
+- Add an Action `output-directory` input so generated artifacts can be kept
+  outside untrusted source checkouts.
+- Bound PR comment artifact reads and escaped output by UTF-8 byte size to
+  prevent memory growth and oversized GitHub comments.
+- Upgrade all repository and example workflows to the SHA-pinned
+  `actions/checkout` v7.0.0 release.
+
 ## 1.0.3 - 2026-06-18
 
 - Replace two CodeQL-flagged identifier regular expressions with linear
