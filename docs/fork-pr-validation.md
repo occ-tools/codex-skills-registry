@@ -16,6 +16,8 @@ The analysis workflow should meet all of these requirements:
   release commit SHA;
 - checkout pull request contents into a separate directory;
 - set `persist-credentials: false` on the pull request checkout;
+- set the Action `output-directory` to a trusted sibling directory outside the
+  pull request checkout;
 - run only static registry inspection against the pull request contents;
 - avoid `npm install`, project scripts, shell interpolation, or dependency
   execution from the pull request contents;
