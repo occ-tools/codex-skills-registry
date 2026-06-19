@@ -10,6 +10,10 @@ inputs:
     description: Project directory to inspect.
     required: false
     default: .
+  output-directory:
+    description: Optional directory for generated artifacts. Defaults to path.
+    required: false
+    default: ""
   command:
     description: CLI command to run. Supported values are doctor, validate, list, audit, export, report, schema, pr-comment, baseline, and site.
     required: false
@@ -113,6 +117,7 @@ runs:
       shell: bash
       env:
         REGISTRY_INPUT_PATH: ${{ inputs.path }}
+        REGISTRY_INPUT_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
         REGISTRY_INPUT_COMMAND: ${{ inputs.command }}
         REGISTRY_INPUT_INCLUDE_EXAMPLES: ${{ inputs.include-examples }}
         REGISTRY_INPUT_CONFIG: ${{ inputs.config }}
@@ -135,6 +140,14 @@ runs:
         if [[ "$target_path" != /* ]]; then
           target_path="$GITHUB_WORKSPACE/$target_path"
         fi
+
+        output_path="$REGISTRY_INPUT_OUTPUT_DIRECTORY"
+        if [[ -z "$output_path" ]]; then
+          output_path="$target_path"
+        elif [[ "$output_path" != /* ]]; then
+          output_path="$GITHUB_WORKSPACE/$output_path"
+        fi
+        mkdir -p "$output_path"
 
         base_args=(--cwd "$target_path")
         if [[ "$REGISTRY_INPUT_INCLUDE_EXAMPLES" != "true" ]]; then
@@ -160,11 +173,11 @@ runs:
         if [[ "$REGISTRY_INPUT_STRICT" == "true" ]]; then
           strict_args+=(--strict)
         fi
-        sarif_file="$target_path/codex-skills-registry.sarif"
+        sarif_file="$output_path/codex-skills-registry.sarif"
         write_issue_outputs() {
           local subcommand="$1"
           shift
-          local summary_file="$target_path/codex-skills-registry-summary.json"
+          local summary_file="$output_path/codex-skills-registry-summary.json"
           set +e
           node dist/cli.js "${summary_args[@]}" "$subcommand" "$@" > "$summary_file"
           local summary_status=$?
@@ -211,18 +224,18 @@ runs:
             run_sarif_or_text audit "${strict_args[@]}"
             ;;
           export)
-            out_file="$target_path/codex-skills-registry-index.json"
-            node dist/cli.js "${args[@]}" export --out codex-skills-registry-index.json
+            out_file="$output_path/codex-skills-registry-index.json"
+            node dist/cli.js "${args[@]}" export --out "$out_file"
             echo "index-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           report)
-            out_file="$target_path/codex-skills-registry-report.md"
-            node dist/cli.js "${text_args[@]}" report --out codex-skills-registry-report.md
+            out_file="$output_path/codex-skills-registry-report.md"
+            node dist/cli.js "${text_args[@]}" report --out "$out_file"
             echo "report-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           pr-comment)
-            out_file="$target_path/codex-skills-registry-pr-comment.md"
-            comment_args=(--out codex-skills-registry-pr-comment.md --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif --comment-marker "$REGISTRY_INPUT_COMMENT_MARKER")
+            out_file="$output_path/codex-skills-registry-pr-comment.md"
+            comment_args=(--out "$out_file" --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif --comment-marker "$REGISTRY_INPUT_COMMENT_MARKER")
             if [[ "$REGISTRY_INPUT_POST_COMMENT" == "true" ]]; then
               comment_args+=(--post)
             fi
@@ -231,22 +244,22 @@ runs:
             write_issue_outputs pr-comment "${strict_args[@]}" --report-path codex-skills-registry-report.md --sarif-path codex-skills-registry.sarif
             ;;
           baseline)
-            out_file="$target_path/codex-skills-baseline.json"
-            node dist/cli.js "${base_args[@]}" baseline --out codex-skills-baseline.json "${strict_args[@]}"
+            out_file="$output_path/codex-skills-baseline.json"
+            node dist/cli.js "${base_args[@]}" baseline --out "$out_file" "${strict_args[@]}"
             echo "baseline-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           schema)
-            out_file="$target_path/codex-skills-registry.schema.json"
+            out_file="$output_path/codex-skills-registry.schema.json"
             schema_args=()
             if [[ -n "$REGISTRY_INPUT_SCHEMA" ]]; then
               schema_args+=("$REGISTRY_INPUT_SCHEMA")
             fi
-            node dist/cli.js "${args[@]}" schema "${schema_args[@]}" --out codex-skills-registry.schema.json
+            node dist/cli.js "${args[@]}" schema "${schema_args[@]}" --out "$out_file"
             echo "schema-path=$out_file" >> "$GITHUB_OUTPUT"
             ;;
           site)
-            out_dir="$target_path/codex-skills-registry-site"
-            node dist/cli.js "${args[@]}" site --out codex-skills-registry-site
+            out_dir="$output_path/codex-skills-registry-site"
+            node dist/cli.js "${args[@]}" site --out "$out_dir"
             echo "site-path=$out_dir" >> "$GITHUB_OUTPUT"
             ;;
           *)

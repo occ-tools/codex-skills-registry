@@ -66,7 +66,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: wangjiehu/codex-skills-registry@dbab3b515c73dd028f5b35bcc22547077601d7a6 # v1.0.3
         with:
           path: .
@@ -226,7 +226,7 @@ permissions:
   pull-requests: write
 
 steps:
-  - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+  - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
   - uses: wangjiehu/codex-skills-registry@dbab3b515c73dd028f5b35bcc22547077601d7a6 # v1.0.3
     with:
       path: .
