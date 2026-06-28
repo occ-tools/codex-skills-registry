@@ -19,7 +19,13 @@ import {
   type ValidationIssue,
   type ValidationResult,
 } from "./schema.js";
-import { isRealSubpath, isSubpath, relativePathInside, skillLine } from "./utils.js";
+import {
+  isRealSubpath,
+  isSubpath,
+  relativePathInside,
+  resolvePathInside,
+  skillLine,
+} from "./utils.js";
 import { discoverGithubWorkflows, type DiscoveredWorkflow } from "./workflows.js";
 
 export interface RegistryLoadOptions extends DiscoverOptions {
@@ -88,9 +94,7 @@ export class SkillsRegistry {
     }
 
     if (options.configFile) {
-      await registry.loadFromConfigFile(
-        path.resolve(options.cwd ?? process.cwd(), options.configFile),
-      );
+      await registry.loadFromConfigFile(resolvePathInside(cwd, options.configFile, "config path"));
     }
 
     await registry.validatePlugins();

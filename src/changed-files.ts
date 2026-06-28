@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ValidationIssue } from "./schema.js";
-import { normalizeRepoPath } from "./utils.js";
+import { normalizeRepoPath, resolvePathInside } from "./utils.js";
 
 export interface ChangedFilesOptions {
   cwd?: string;
@@ -15,7 +15,11 @@ export async function loadChangedFiles(
     return undefined;
   }
 
-  const filePath = path.resolve(options.cwd ?? process.cwd(), options.changedFilesFile);
+  const filePath = resolvePathInside(
+    options.cwd ?? process.cwd(),
+    options.changedFilesFile,
+    "changed-files path",
+  );
   const content = await readFile(filePath, "utf8");
   const values = content
     .split(/\r?\n/)

@@ -26,6 +26,16 @@ export function isSubpath(root: string, candidate: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+export function resolvePathInside(root: string, value: string, label: string): string {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, value);
+  if (!isSubpath(resolvedRoot, resolved)) {
+    throw new Error(`${label} must stay inside ${resolvedRoot}.`);
+  }
+
+  return resolved;
+}
+
 export async function isRealSubpath(root: string, candidate: string): Promise<boolean> {
   if (!isSubpath(root, candidate)) {
     return false;

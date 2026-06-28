@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { zodErrorToIssues, type ValidationIssue } from "./schema.js";
-import { firstExistingPath } from "./utils.js";
+import { firstExistingPath, resolvePathInside } from "./utils.js";
 
 export const RegistryPolicyPresetSchema = z.enum([
   "recommended",
@@ -126,9 +126,25 @@ const POLICY_FILENAMES = [
  * @returns Loaded policy and validation diagnostics.
  */
 export async function loadRegistryPolicy(cwd: string, policyFile?: string): Promise<LoadedPolicy> {
-  const candidates = policyFile
-    ? [path.resolve(cwd, policyFile)]
-    : POLICY_FILENAMES.map((filename) => path.join(cwd, filename));
+  let candidates: string[];
+  if (policyFile) {
+    try {
+      candidates = [resolvePathInside(cwd, policyFile, "policy path")];
+    } catch (error) {
+      return {
+        policy: DEFAULT_POLICY,
+        diagnostics: [
+          {
+            severity: "error",
+            path: policyFile,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
+  } else {
+    candidates = POLICY_FILENAMES.map((filename) => path.join(cwd, filename));
+  }
   const sourcePath = await firstExistingPath(candidates);
 
   if (!sourcePath) {

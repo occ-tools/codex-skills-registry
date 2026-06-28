@@ -31,6 +31,14 @@ describe("policy", () => {
     expect(loaded.diagnostics[0]?.message).toContain("does not exist");
   });
 
+  it("reports an error when an explicit policy path escapes the project", async () => {
+    const loaded = await loadRegistryPolicy(fixtureRoot, "../outside-policy.yaml");
+
+    expect(loaded.diagnostics).toHaveLength(1);
+    expect(loaded.diagnostics[0]?.severity).toBe("error");
+    expect(loaded.diagnostics[0]?.message).toContain("policy path must stay inside");
+  });
+
   it("applies policy to MCP audit rules", async () => {
     const registry = await SkillsRegistry.load({
       cwd: fixtureRoot,
