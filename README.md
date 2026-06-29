@@ -136,6 +136,11 @@ codex-skills doctor --changed-files changed-files.txt
 codex-skills doctor --baseline codex-skills-baseline.json
 ```
 
+Project input files such as `--config`, `--policy`, `--changed-files`, and
+`--baseline` must resolve inside `--cwd` (or the Action `path`). Generated
+outputs can still be written to a separate trusted `output-directory` in the
+GitHub Action.
+
 ## What Gets Checked
 
 Skill and plugin checks:

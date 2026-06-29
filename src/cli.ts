@@ -83,10 +83,16 @@ export async function runCli(argv = process.argv): Promise<void> {
     )
     .version(VERSION)
     .option("-C, --cwd <dir>", "project directory to inspect", process.cwd())
-    .option("--config <file>", "JSON/YAML file containing additional skill records")
-    .option("--policy <file>", "YAML/JSON registry policy file")
-    .option("--changed-files <file>", "newline-delimited changed file list for PR-focused output")
-    .option("--baseline <file>", "issue baseline JSON file; defaults to policy baselineFile")
+    .option("--config <file>", "project-scoped JSON/YAML file containing additional skill records")
+    .option("--policy <file>", "project-scoped YAML/JSON registry policy file")
+    .option(
+      "--changed-files <file>",
+      "project-scoped newline-delimited changed file list for PR-focused output",
+    )
+    .option(
+      "--baseline <file>",
+      "project-scoped issue baseline JSON file; defaults to policy baselineFile",
+    )
     .option("--no-examples", "exclude the examples/ skill roots under the project directory")
     .option("--format <format>", "output format: text, json, or sarif", "text")
     .option("--github-annotations", "emit GitHub Actions annotations for diagnostics")

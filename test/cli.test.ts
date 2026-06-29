@@ -220,6 +220,21 @@ describe("CLI", () => {
     }
   });
 
+  it("rejects changed-files inputs outside the project", async () => {
+    await expect(
+      runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        "test/fixtures/invalid-project",
+        "--no-examples",
+        "--changed-files",
+        "../changed-files.txt",
+        "doctor",
+      ]),
+    ).rejects.toThrow("changed-files path must stay inside");
+  });
+
   it("emits GitHub annotations to stderr", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -262,6 +277,21 @@ describe("CLI", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
+  });
+
+  it("rejects config inputs outside the project", async () => {
+    await expect(
+      runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        "test/fixtures/plugin-project",
+        "--no-examples",
+        "--config",
+        "../external-config.yaml",
+        "list",
+      ]),
+    ).rejects.toThrow("config path must stay inside");
   });
 
   it("exports registry indexes with project-relative paths", async () => {
@@ -426,6 +456,25 @@ describe("CLI", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
+  });
+
+  it("reports baseline inputs outside the project as diagnostics", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runCli([
+      "node",
+      "codex-skills",
+      "--cwd",
+      "test/fixtures/invalid-project",
+      "--no-examples",
+      "--baseline",
+      "../codex-skills-baseline.json",
+      "doctor",
+    ]);
+
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("baseline path must stay inside");
+    expect(process.exitCode).toBe(1);
   });
 
   it("prints pull request comments", async () => {
