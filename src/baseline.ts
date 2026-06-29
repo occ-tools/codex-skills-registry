@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { IssueBaseline } from "./issues.js";
-import { resolvePathInside } from "./utils.js";
+import { resolveExistingPathInside } from "./utils.js";
 
 const IssueBaselineSchema = z.object({
   version: z.literal(1),
@@ -25,7 +25,7 @@ export async function loadIssueBaselineFile(
     return undefined;
   }
 
-  const baselinePath = resolvePathInside(cwd, baselineFile, "baseline path");
+  const baselinePath = await resolveExistingPathInside(cwd, baselineFile, "baseline path");
   const parsed = JSON.parse(await readFile(baselinePath, "utf8")) as unknown;
   return IssueBaselineSchema.parse(parsed);
 }

@@ -29,6 +29,15 @@ export function resolvePathInside(root, value, label) {
     }
     return resolved;
 }
+export async function resolveExistingPathInside(root, value, label) {
+    const resolvedRoot = path.resolve(root);
+    const resolved = resolvePathInside(resolvedRoot, value, label);
+    const [realRoot, realCandidate] = await Promise.all([realpath(resolvedRoot), realpath(resolved)]);
+    if (!isSubpath(realRoot, realCandidate)) {
+        throw new Error(`${label} must resolve inside ${resolvedRoot}.`);
+    }
+    return resolved;
+}
 export async function isRealSubpath(root, candidate) {
     if (!isSubpath(root, candidate)) {
         return false;

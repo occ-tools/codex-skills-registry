@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.5 - 2026-06-29
+
+- Keep project-scoped input files inside the inspected project after resolving
+  symlinks or junctions.
+- Add reusable Action smoke coverage for escaped project input paths.
+- Refresh repository metadata, badges, and Action examples for the
+  `occ-tools/codex-skills-registry` GitHub repository.
+- Upgrade low-risk `@biomejs/biome` and `smol-toml` patch/minor dependencies.
+
 ## 1.0.4 - 2026-06-20
 
 - Add an Action `output-directory` input so generated artifacts can be kept

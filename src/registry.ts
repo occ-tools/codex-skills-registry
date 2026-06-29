@@ -23,7 +23,7 @@ import {
   isRealSubpath,
   isSubpath,
   relativePathInside,
-  resolvePathInside,
+  resolveExistingPathInside,
   skillLine,
 } from "./utils.js";
 import { discoverGithubWorkflows, type DiscoveredWorkflow } from "./workflows.js";
@@ -94,7 +94,9 @@ export class SkillsRegistry {
     }
 
     if (options.configFile) {
-      await registry.loadFromConfigFile(resolvePathInside(cwd, options.configFile, "config path"));
+      await registry.loadFromConfigFile(
+        await resolveExistingPathInside(cwd, options.configFile, "config path"),
+      );
     }
 
     await registry.validatePlugins();

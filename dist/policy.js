@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { zodErrorToIssues } from "./schema.js";
-import { firstExistingPath, resolvePathInside } from "./utils.js";
+import { firstExistingPath, resolveExistingPathInside, resolvePathInside } from "./utils.js";
 export const RegistryPolicyPresetSchema = z.enum([
     "recommended",
     "strict-mcp",
@@ -150,6 +150,9 @@ export async function loadRegistryPolicy(cwd, policyFile) {
         };
     }
     try {
+        if (policyFile) {
+            await resolveExistingPathInside(cwd, policyFile, "policy path");
+        }
         const content = await readFile(sourcePath, "utf8");
         const parsed = sourcePath.endsWith(".json")
             ? JSON.parse(content)

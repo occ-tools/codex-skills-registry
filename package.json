@@ -1,6 +1,6 @@
 {
   "name": "@wangjiehu/codex-skills-registry",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Validate, index, and test Codex Skills, plugin manifests, and MCP server configs for open-source maintainer workflows.",
   "type": "module",
   "license": "MIT",
@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wangjiehu/codex-skills-registry.git"
+    "url": "git+https://github.com/occ-tools/codex-skills-registry.git"
   },
   "bugs": {
-    "url": "https://github.com/wangjiehu/codex-skills-registry/issues"
+    "url": "https://github.com/occ-tools/codex-skills-registry/issues"
   },
-  "homepage": "https://github.com/wangjiehu/codex-skills-registry#readme",
+  "homepage": "https://github.com/occ-tools/codex-skills-registry#readme",
   "keywords": [
     "codex",
     "openai",
@@ -83,12 +83,12 @@
   },
   "dependencies": {
     "commander": "^14.0.2",
-    "smol-toml": "^1.4.2",
+    "smol-toml": "^1.7.0",
     "yaml": "^2.8.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.16",
+    "@biomejs/biome": "^2.5.1",
     "@types/node": "^24.10.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

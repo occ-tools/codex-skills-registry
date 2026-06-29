@@ -42,12 +42,12 @@ Latest verified main-branch checks:
 
 | Workflow | Result | Evidence |
 | --- | --- | --- |
-| validate | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27837062780 |
-| codeql | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27837062782 |
-| pages | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27837062781 |
-| registry-artifacts | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27837062791 |
-| scorecard | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27759771438 |
-| release | success | https://github.com/wangjiehu/codex-skills-registry/actions/runs/27837556431 |
+| validate | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062780 |
+| codeql | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062782 |
+| pages | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062781 |
+| registry-artifacts | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062791 |
+| scorecard | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27759771438 |
+| release | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837556431 |
 
 The validate workflow covered Node.js 20, 22, and 24 on Ubuntu, Windows, and
 macOS, plus reusable Action smoke tests for doctor, schema, report, PR comment,
@@ -58,7 +58,7 @@ baseline, and site commands.
 The split PR analysis and trusted `workflow_run` publisher posted an escaped
 no-findings summary on a public pull request:
 
-https://github.com/wangjiehu/codex-skills-registry/pull/19#issuecomment-4753240784
+https://github.com/occ-tools/codex-skills-registry/pull/19#issuecomment-4753240784
 
 Copied summary:
 
