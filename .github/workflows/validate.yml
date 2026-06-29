@@ -76,3 +76,16 @@ jobs:
           path: .
           include-examples: "true"
           command: site
+      - name: Smoke escaped policy input is rejected
+        id: escaped-policy
+        uses: ./
+        continue-on-error: true
+        with:
+          path: .
+          command: doctor
+          policy: ../outside-policy.yaml
+      - name: Verify escaped policy input failed
+        if: steps.escaped-policy.outcome != 'failure'
+        run: |
+          echo "Escaped policy input unexpectedly succeeded." >&2
+          exit 1

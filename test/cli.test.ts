@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -233,6 +233,36 @@ describe("CLI", () => {
         "doctor",
       ]),
     ).rejects.toThrow("changed-files path must stay inside");
+  });
+
+  it("rejects changed-files inputs that resolve outside the project", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-skills-changed-symlink-"));
+    const outside = await mkdtemp(path.join(tmpdir(), "codex-skills-changed-outside-"));
+
+    try {
+      await writeFile(path.join(outside, "changed-files.txt"), ".codex/config.toml\n", "utf8");
+      await symlink(
+        outside,
+        path.join(root, "linked"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      await expect(
+        runCli([
+          "node",
+          "codex-skills",
+          "--cwd",
+          root,
+          "--no-examples",
+          "--changed-files",
+          "linked/changed-files.txt",
+          "doctor",
+        ]),
+      ).rejects.toThrow("changed-files path must resolve inside");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("emits GitHub annotations to stderr", async () => {
@@ -475,6 +505,43 @@ describe("CLI", () => {
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
     expect(output).toContain("baseline path must stay inside");
     expect(process.exitCode).toBe(1);
+  });
+
+  it("reports baseline inputs that resolve outside the project as diagnostics", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-skills-baseline-symlink-"));
+    const outside = await mkdtemp(path.join(tmpdir(), "codex-skills-baseline-outside-"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await writeFile(
+        path.join(outside, "codex-skills-baseline.json"),
+        JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), issues: [] }),
+        "utf8",
+      );
+      await symlink(
+        outside,
+        path.join(root, "linked"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      await runCli([
+        "node",
+        "codex-skills",
+        "--cwd",
+        root,
+        "--no-examples",
+        "--baseline",
+        "linked/codex-skills-baseline.json",
+        "doctor",
+      ]);
+
+      const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(output).toContain("baseline path must resolve inside");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("prints pull request comments", async () => {

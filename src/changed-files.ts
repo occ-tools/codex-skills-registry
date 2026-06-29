@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ValidationIssue } from "./schema.js";
-import { normalizeRepoPath, resolvePathInside } from "./utils.js";
+import { normalizeRepoPath, resolveExistingPathInside } from "./utils.js";
 
 export interface ChangedFilesOptions {
   cwd?: string;
@@ -15,7 +15,7 @@ export async function loadChangedFiles(
     return undefined;
   }
 
-  const filePath = resolvePathInside(
+  const filePath = await resolveExistingPathInside(
     options.cwd ?? process.cwd(),
     options.changedFilesFile,
     "changed-files path",

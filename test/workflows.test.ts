@@ -129,6 +129,17 @@ jobs:
     expect(action).toContain('node dist/action-summary.js "$summary_file"');
   });
 
+  it("keeps the reusable action smoke coverage for escaped project inputs", async () => {
+    const workflow = await readFile(
+      path.join(process.cwd(), ".github", "workflows", "validate.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("Smoke escaped policy input is rejected");
+    expect(workflow).toContain("policy: ../outside-policy.yaml");
+    expect(workflow).toContain("steps.escaped-policy.outcome != 'failure'");
+  });
+
   it("separates read-only PR analysis from trusted comment publishing", async () => {
     const analysisWorkflow = await readFile(
       path.join(process.cwd(), ".github", "workflows", "registry-pr-comment.yml"),
@@ -178,7 +189,7 @@ jobs:
       "utf8",
     );
     const currentRelease =
-      "wangjiehu/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4";
+      "occ-tools/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4";
 
     expect(demoWorkflow).toContain(currentRelease);
     expect(demoWorkflow).not.toContain("# v0.6.3");

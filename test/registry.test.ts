@@ -134,6 +134,41 @@ describe("SkillsRegistry", () => {
     }
   });
 
+  it("rejects config files that resolve outside the project", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-registry-config-symlink-"));
+    const outside = await mkdtemp(path.join(tmpdir(), "codex-registry-config-outside-"));
+
+    try {
+      await writeFile(
+        path.join(outside, "skills.yaml"),
+        `skills:
+  - name: escaped-config-skill
+    description: This config file resolves outside the inspected project.
+    version: 0.1.0
+    triggers:
+      - manual
+`,
+        "utf8",
+      );
+      await symlink(
+        outside,
+        path.join(root, "linked"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      await expect(
+        SkillsRegistry.load({
+          cwd: root,
+          includeExamples: false,
+          configFile: "linked/skills.yaml",
+        }),
+      ).rejects.toThrow("config path must resolve inside");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it("applies plugin allow and deny policy diagnostics", async () => {
     const registry = await SkillsRegistry.load({
       cwd: "test/fixtures/plugin-external-project",

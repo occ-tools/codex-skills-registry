@@ -5,7 +5,7 @@ import { auditRegistry } from "./audit.js";
 import { discoverProject, parseSkillMarkdown, } from "./discovery.js";
 import { DEFAULT_POLICY, loadRegistryPolicy } from "./policy.js";
 import { CodexSkillSchema, normalizeSkillInput, zodErrorToIssues, } from "./schema.js";
-import { isRealSubpath, isSubpath, relativePathInside, resolvePathInside, skillLine, } from "./utils.js";
+import { isRealSubpath, isSubpath, relativePathInside, resolveExistingPathInside, skillLine, } from "./utils.js";
 import { discoverGithubWorkflows } from "./workflows.js";
 /**
  * In-memory index for Codex maintainer automation assets. The registry is
@@ -46,7 +46,7 @@ export class SkillsRegistry {
             registry.registerSkill(skill);
         }
         if (options.configFile) {
-            await registry.loadFromConfigFile(resolvePathInside(cwd, options.configFile, "config path"));
+            await registry.loadFromConfigFile(await resolveExistingPathInside(cwd, options.configFile, "config path"));
         }
         await registry.validatePlugins();
         return registry;

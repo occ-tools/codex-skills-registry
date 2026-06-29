@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
@@ -37,6 +39,30 @@ describe("policy", () => {
     expect(loaded.diagnostics).toHaveLength(1);
     expect(loaded.diagnostics[0]?.severity).toBe("error");
     expect(loaded.diagnostics[0]?.message).toContain("policy path must stay inside");
+  });
+
+  it("reports an error when an explicit policy path resolves outside the project", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-policy-symlink-"));
+    const outside = await mkdtemp(path.join(tmpdir(), "codex-policy-outside-"));
+
+    try {
+      await mkdir(root, { recursive: true });
+      await writeFile(path.join(outside, "policy.yaml"), "failOnWarnings: true\n", "utf8");
+      await symlink(
+        outside,
+        path.join(root, "linked"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      const loaded = await loadRegistryPolicy(root, "linked/policy.yaml");
+
+      expect(loaded.diagnostics).toHaveLength(1);
+      expect(loaded.diagnostics[0]?.severity).toBe("error");
+      expect(loaded.diagnostics[0]?.message).toContain("policy path must resolve inside");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("applies policy to MCP audit rules", async () => {

@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { normalizeRepoPath, resolvePathInside } from "./utils.js";
+import { normalizeRepoPath, resolveExistingPathInside } from "./utils.js";
 export async function loadChangedFiles(options) {
     if (!options.changedFilesFile) {
         return undefined;
     }
-    const filePath = resolvePathInside(options.cwd ?? process.cwd(), options.changedFilesFile, "changed-files path");
+    const filePath = await resolveExistingPathInside(options.cwd ?? process.cwd(), options.changedFilesFile, "changed-files path");
     const content = await readFile(filePath, "utf8");
     const values = content
         .split(/\r?\n/)
