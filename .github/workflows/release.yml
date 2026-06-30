@@ -57,8 +57,47 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: ${{ steps.pack.outputs.tarball }}
-      - run: npm publish "${{ steps.pack.outputs.tarball }}" --access public
+      - name: Publish npm package
         if: steps.published.outputs.exists != 'true'
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set +e
+          publish_output="$(npm publish "$TARBALL" --access public 2>&1)"
+          publish_status=$?
+          set -e
+
+          printf '%s\n' "$publish_output"
+          if [[ "$publish_status" -eq 0 ]]; then
+            exit 0
+          fi
+
+          if grep -qE 'E404|Not Found - PUT|not have permission' <<< "$publish_output"; then
+            {
+              echo "### npm publish permission check failed"
+              echo ""
+              echo "Package: \`$PACKAGE_NAME@$PACKAGE_VERSION\`"
+              echo ""
+              echo "npm returned a not-found or permission error while publishing. For Trusted Publishing, verify the npm package publisher is configured for this GitHub repository and workflow:"
+              echo ""
+              echo "- GitHub organization/user: \`occ-tools\`"
+              echo "- GitHub repository: \`codex-skills-registry\`"
+              echo "- Workflow filename: \`release.yml\`"
+              echo "- Package name: \`$PACKAGE_NAME\`"
+              echo ""
+              echo "After fixing the npm package settings, rerun the failed workflow; no source change is required."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            {
+              echo "npm publish could not publish $PACKAGE_NAME@$PACKAGE_VERSION."
+              echo "Check the npm Trusted Publisher configuration for occ-tools/codex-skills-registry and .github/workflows/release.yml, then rerun this workflow."
+            } >&2
+          fi
+
+          exit "$publish_status"
       - name: Report existing npm version
         if: steps.published.outputs.exists == 'true'
         run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published; skipping npm publish."
