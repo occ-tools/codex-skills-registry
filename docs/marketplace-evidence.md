@@ -92,3 +92,27 @@ Copied `npm view @wangjiehu/codex-skills-registry@1.0.4 dist --json` fields:
   }
 }
 ```
+
+## v1.0.5 Release Blocker
+
+The `v1.0.5` tag points at the merged `1.0.5` release commit, and the release
+workflow passed validation, packaging, and provenance attestation. The run then
+failed at `npm publish` with an npm not-found or permission response for
+`@wangjiehu/codex-skills-registry@1.0.5`:
+
+https://github.com/occ-tools/codex-skills-registry/actions/runs/28357920802
+
+Current registry state:
+
+```text
+npm view @wangjiehu/codex-skills-registry version
+1.0.4
+
+npm view @wangjiehu/codex-skills-registry@1.0.5 version
+E404 No match found for version 1.0.5
+```
+
+Because the GitHub repository moved to `occ-tools/codex-skills-registry`, the
+next owner action is to update the npm package's Trusted Publisher settings for
+that repository and `.github/workflows/release.yml`, then rerun the failed
+workflow.
