@@ -91,10 +91,10 @@ jobs:
               echo "After fixing the npm package settings, rerun the failed workflow; no source change is required."
             } >> "$GITHUB_STEP_SUMMARY"
 
-            cat >&2 <<EOF
-npm publish could not publish $PACKAGE_NAME@$PACKAGE_VERSION.
-Check the npm Trusted Publisher configuration for occ-tools/codex-skills-registry and .github/workflows/release.yml, then rerun this workflow.
-EOF
+            {
+              echo "npm publish could not publish $PACKAGE_NAME@$PACKAGE_VERSION."
+              echo "Check the npm Trusted Publisher configuration for occ-tools/codex-skills-registry and .github/workflows/release.yml, then rerun this workflow."
+            } >&2
           fi
 
           exit "$publish_status"
