@@ -4,7 +4,8 @@ This file records copied release-readiness evidence for the public package and
 GitHub Action listing. It is intentionally text-based so maintainers can review
 it in Git, without relying on screenshots that go stale quickly.
 
-Refreshed on 2026-06-20 after the v1.0.4 maintenance release.
+Refreshed on 2026-07-03 after the repository migration to
+`Hephaestus-DevKit/codex-skills-registry`.
 
 ## Local Gates
 
@@ -112,7 +113,7 @@ npm view @wangjiehu/codex-skills-registry@1.0.5 version
 E404 No match found for version 1.0.5
 ```
 
-Because the GitHub repository moved to `Hephaestus-DevKit/codex-skills-registry`, the
-next owner action is to update the npm package's Trusted Publisher settings for
-that repository and `.github/workflows/release.yml`, then rerun the failed
-workflow.
+Because the GitHub repository moved to
+`Hephaestus-DevKit/codex-skills-registry`, the next owner action is to update
+the npm package's Trusted Publisher settings for that repository and
+`.github/workflows/release.yml`, then rerun the failed workflow.

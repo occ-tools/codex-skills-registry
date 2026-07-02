@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Keep npm Trusted Publishing recovery guidance aligned with the
+  `Hephaestus-DevKit/codex-skills-registry` repository.
+- Make Pages deployments cancel stale in-progress runs and wait longer for the
+  GitHub Pages deployment queue before timing out.
+- Refresh Biome schema metadata for the installed formatter version.
+
 ## 1.0.5 - 2026-06-29
 
 - Keep project-scoped input files inside the inspected project after resolving

@@ -13,7 +13,7 @@ configuration before changing source code.
 For this repository, the npm package publisher should be configured with:
 
 - Provider: GitHub Actions
-- GitHub organization/user: `occ-tools`
+- GitHub organization/user: `Hephaestus-DevKit`
 - GitHub repository: `codex-skills-registry`
 - Workflow filename: `release.yml`
 - Package: `@wangjiehu/codex-skills-registry`

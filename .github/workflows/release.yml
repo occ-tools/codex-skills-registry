@@ -83,7 +83,7 @@ jobs:
               echo ""
               echo "npm returned a not-found or permission error while publishing. For Trusted Publishing, verify the npm package publisher is configured for this GitHub repository and workflow:"
               echo ""
-              echo "- GitHub organization/user: \`occ-tools\`"
+              echo "- GitHub organization/user: \`Hephaestus-DevKit\`"
               echo "- GitHub repository: \`codex-skills-registry\`"
               echo "- Workflow filename: \`release.yml\`"
               echo "- Package name: \`$PACKAGE_NAME\`"
