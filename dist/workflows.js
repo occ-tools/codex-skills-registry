@@ -43,6 +43,8 @@ export async function discoverGithubWorkflows(cwd) {
 export function auditGithubWorkflow(workflow, options = {}) {
     const issues = [];
     const basePath = `workflows.${workflow.name}`;
+    const prTriggered = hasWorkflowTrigger(workflow.triggers, "pull_request") ||
+        hasWorkflowTrigger(workflow.triggers, "pull_request_target");
     if (workflow.permissions === undefined && workflow.jobs.length === 0) {
         issues.push({
             severity: "warning",
@@ -69,11 +71,17 @@ export function auditGithubWorkflow(workflow, options = {}) {
             });
         }
     }
-    for (const issue of auditWorkflowPermissions(workflow.permissions, `${basePath}.permissions`, workflow.sourcePath)) {
+    for (const issue of auditWorkflowPermissions(workflow.permissions, `${basePath}.permissions`, workflow.sourcePath, {
+        scope: "workflow",
+        prTriggered,
+    })) {
         issues.push(issue);
     }
     for (const job of workflow.jobs) {
-        for (const issue of auditWorkflowPermissions(job.permissions, `${basePath}.jobs.${job.id}.permissions`, workflow.sourcePath, job.permissionsLine ?? job.line)) {
+        for (const issue of auditWorkflowPermissions(job.permissions, `${basePath}.jobs.${job.id}.permissions`, workflow.sourcePath, {
+            scope: "job",
+            prTriggered,
+        }, job.permissionsLine ?? job.line)) {
             issues.push(issue);
         }
     }
@@ -104,8 +112,6 @@ export function auditGithubWorkflow(workflow, options = {}) {
             });
         }
     }
-    const prTriggered = hasWorkflowTrigger(workflow.triggers, "pull_request") ||
-        hasWorkflowTrigger(workflow.triggers, "pull_request_target");
     if (prTriggered && options.strict) {
         for (const run of workflow.runs) {
             if (!/\$\{\{\s*github\.event\.pull_request\./.test(run.value)) {
@@ -238,7 +244,7 @@ function parseWorkflowRecord(record, sourcePath, content) {
         runs,
     };
 }
-function auditWorkflowPermissions(permissions, pathValue, file, line) {
+function auditWorkflowPermissions(permissions, pathValue, file, context, line) {
     if (permissions === undefined) {
         return [];
     }
@@ -259,7 +265,12 @@ function auditWorkflowPermissions(permissions, pathValue, file, line) {
         return [];
     }
     return Object.entries(permissions)
-        .filter(([permission, value]) => value === "write" && RISKY_WRITE_PERMISSIONS.has(permission))
+        .filter(([permission, value]) => {
+        if (value !== "write" || !RISKY_WRITE_PERMISSIONS.has(permission)) {
+            return false;
+        }
+        return context.scope === "workflow" || context.prTriggered || permission !== "contents";
+    })
         .map(([permission]) => ({
         severity: "warning",
         code: "WORKFLOW_BROAD_PERMISSIONS",

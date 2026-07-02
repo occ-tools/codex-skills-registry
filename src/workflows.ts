@@ -45,6 +45,11 @@ export interface WorkflowDiscoveryResult {
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 const RISKY_WRITE_PERMISSIONS = new Set(["actions", "contents", "packages"]);
 
+interface PermissionAuditContext {
+  scope: "workflow" | "job";
+  prTriggered: boolean;
+}
+
 /**
  * Discovers GitHub Actions workflow files from .github/workflows.
  *
@@ -92,6 +97,9 @@ export function auditGithubWorkflow(
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const basePath = `workflows.${workflow.name}`;
+  const prTriggered =
+    hasWorkflowTrigger(workflow.triggers, "pull_request") ||
+    hasWorkflowTrigger(workflow.triggers, "pull_request_target");
 
   if (workflow.permissions === undefined && workflow.jobs.length === 0) {
     issues.push({
@@ -126,6 +134,10 @@ export function auditGithubWorkflow(
     workflow.permissions,
     `${basePath}.permissions`,
     workflow.sourcePath,
+    {
+      scope: "workflow",
+      prTriggered,
+    },
   )) {
     issues.push(issue);
   }
@@ -135,6 +147,10 @@ export function auditGithubWorkflow(
       job.permissions,
       `${basePath}.jobs.${job.id}.permissions`,
       workflow.sourcePath,
+      {
+        scope: "job",
+        prTriggered,
+      },
       job.permissionsLine ?? job.line,
     )) {
       issues.push(issue);
@@ -173,9 +189,6 @@ export function auditGithubWorkflow(
     }
   }
 
-  const prTriggered =
-    hasWorkflowTrigger(workflow.triggers, "pull_request") ||
-    hasWorkflowTrigger(workflow.triggers, "pull_request_target");
   if (prTriggered && options.strict) {
     for (const run of workflow.runs) {
       if (!/\$\{\{\s*github\.event\.pull_request\./.test(run.value)) {
@@ -334,6 +347,7 @@ function auditWorkflowPermissions(
   permissions: unknown,
   pathValue: string,
   file: string,
+  context: PermissionAuditContext,
   line?: number,
 ): ValidationIssue[] {
   if (permissions === undefined) {
@@ -359,7 +373,13 @@ function auditWorkflowPermissions(
   }
 
   return Object.entries(permissions as Record<string, unknown>)
-    .filter(([permission, value]) => value === "write" && RISKY_WRITE_PERMISSIONS.has(permission))
+    .filter(([permission, value]) => {
+      if (value !== "write" || !RISKY_WRITE_PERMISSIONS.has(permission)) {
+        return false;
+      }
+
+      return context.scope === "workflow" || context.prTriggered || permission !== "contents";
+    })
     .map(([permission]) => ({
       severity: "warning",
       code: "WORKFLOW_BROAD_PERMISSIONS",

@@ -115,6 +115,58 @@ jobs:
     expect(permissionIssues[0]?.line).toBe(12);
   });
 
+  it("allows job-scoped contents write for push-only publishing workflows", () => {
+    const issues = auditGithubWorkflow({
+      name: "pages",
+      sourcePath: ".github/workflows/pages.yml",
+      triggers: {
+        push: {
+          branches: ["main"],
+        },
+      },
+      permissions: {
+        contents: "read",
+      },
+      jobs: [
+        {
+          id: "publish",
+          permissions: {
+            contents: "write",
+          },
+        },
+      ],
+      uses: [],
+      runs: [],
+    });
+
+    expect(issues.filter((issue) => issue.code === "WORKFLOW_BROAD_PERMISSIONS")).toHaveLength(0);
+  });
+
+  it("flags job-scoped contents write in pull request workflows", () => {
+    const issues = auditGithubWorkflow({
+      name: "comment",
+      sourcePath: ".github/workflows/comment.yml",
+      triggers: {
+        pull_request: {},
+      },
+      permissions: {
+        contents: "read",
+      },
+      jobs: [
+        {
+          id: "publish",
+          permissions: {
+            contents: "write",
+          },
+        },
+      ],
+      uses: [],
+      runs: [],
+    });
+
+    expect(issues.map((issue) => issue.code)).toContain("WORKFLOW_BROAD_PERMISSIONS");
+  });
+
   it("keeps the composite action wired to tested helper scripts", async () => {
     const action = await readFile(path.join(process.cwd(), "action.yml"), "utf8");
     const dollar = "$";

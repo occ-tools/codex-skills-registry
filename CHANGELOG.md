@@ -4,8 +4,8 @@
 
 - Keep npm Trusted Publishing recovery guidance aligned with the
   `Hephaestus-DevKit/codex-skills-registry` repository.
-- Make Pages deployments cancel stale in-progress runs and wait longer for the
-  GitHub Pages deployment queue before timing out.
+- Make Pages publishing use a generated `gh-pages` branch so documentation
+  updates are not blocked by stale GitHub Pages workflow deployment queues.
 - Refresh Biome schema metadata for the installed formatter version.
 
 ## 1.0.5 - 2026-06-29
