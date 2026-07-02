@@ -1,6 +1,6 @@
 {
   "name": "@hepheastus-devkit/codex-skills-registry",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Validate, index, and test Codex Skills, plugin manifests, and MCP server configs for open-source maintainer workflows.",
   "type": "module",
   "license": "MIT",
