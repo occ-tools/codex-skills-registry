@@ -42,12 +42,12 @@ Latest verified main-branch checks:
 
 | Workflow | Result | Evidence |
 | --- | --- | --- |
-| validate | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062780 |
-| codeql | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062782 |
-| pages | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062781 |
-| registry-artifacts | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837062791 |
-| scorecard | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27759771438 |
-| release | success | https://github.com/occ-tools/codex-skills-registry/actions/runs/27837556431 |
+| validate | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27837062780 |
+| codeql | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27837062782 |
+| pages | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27837062781 |
+| registry-artifacts | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27837062791 |
+| scorecard | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27759771438 |
+| release | success | https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/27837556431 |
 
 The validate workflow covered Node.js 20, 22, and 24 on Ubuntu, Windows, and
 macOS, plus reusable Action smoke tests for doctor, schema, report, PR comment,
@@ -58,7 +58,7 @@ baseline, and site commands.
 The split PR analysis and trusted `workflow_run` publisher posted an escaped
 no-findings summary on a public pull request:
 
-https://github.com/occ-tools/codex-skills-registry/pull/19#issuecomment-4753240784
+https://github.com/Hephaestus-DevKit/codex-skills-registry/pull/19#issuecomment-4753240784
 
 Copied summary:
 
@@ -100,7 +100,7 @@ workflow passed validation, packaging, and provenance attestation. The run then
 failed at `npm publish` with an npm not-found or permission response for
 `@wangjiehu/codex-skills-registry@1.0.5`:
 
-https://github.com/occ-tools/codex-skills-registry/actions/runs/28357920802
+https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/runs/28357920802
 
 Current registry state:
 
@@ -112,7 +112,7 @@ npm view @wangjiehu/codex-skills-registry@1.0.5 version
 E404 No match found for version 1.0.5
 ```
 
-Because the GitHub repository moved to `occ-tools/codex-skills-registry`, the
+Because the GitHub repository moved to `Hephaestus-DevKit/codex-skills-registry`, the
 next owner action is to update the npm package's Trusted Publisher settings for
 that repository and `.github/workflows/release.yml`, then rerun the failed
 workflow.

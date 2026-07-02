@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/occ-tools/codex-skills-registry.git"
+    "url": "git+https://github.com/Hephaestus-DevKit/codex-skills-registry.git"
   },
   "bugs": {
-    "url": "https://github.com/occ-tools/codex-skills-registry/issues"
+    "url": "https://github.com/Hephaestus-DevKit/codex-skills-registry/issues"
   },
-  "homepage": "https://github.com/occ-tools/codex-skills-registry#readme",
+  "homepage": "https://github.com/Hephaestus-DevKit/codex-skills-registry#readme",
   "keywords": [
     "codex",
     "openai",

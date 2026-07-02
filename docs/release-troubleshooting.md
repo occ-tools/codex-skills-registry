@@ -3,7 +3,7 @@
 ## npm Trusted Publishing after repository moves
 
 The npm package is still published as `@wangjiehu/codex-skills-registry`, while
-the GitHub repository now lives at `occ-tools/codex-skills-registry`.
+the GitHub repository now lives at `Hephaestus-DevKit/codex-skills-registry`.
 
 If the release workflow passes validation, packs the tarball, attests
 provenance, and then fails at `npm publish` with an npm `E404`, `Not Found -
@@ -21,12 +21,12 @@ For this repository, the npm package publisher should be configured with:
 After fixing the npm package settings, rerun only the failed workflow:
 
 ```bash
-gh run rerun <run-id> --repo occ-tools/codex-skills-registry --failed
+gh run rerun <run-id> --repo Hephaestus-DevKit/codex-skills-registry --failed
 ```
 
 For the blocked `v1.0.5` release attempt, use:
 
 ```bash
-gh run rerun 28357920802 --repo occ-tools/codex-skills-registry --failed
+gh run rerun 28357920802 --repo Hephaestus-DevKit/codex-skills-registry --failed
 ```
 

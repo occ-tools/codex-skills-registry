@@ -1,8 +1,8 @@
 # codex-skills-registry
 
-[![Validate](https://github.com/occ-tools/codex-skills-registry/actions/workflows/validate.yml/badge.svg)](https://github.com/occ-tools/codex-skills-registry/actions/workflows/validate.yml)
-[![CodeQL](https://github.com/occ-tools/codex-skills-registry/actions/workflows/codeql.yml/badge.svg)](https://github.com/occ-tools/codex-skills-registry/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://github.com/occ-tools/codex-skills-registry/actions/workflows/scorecard.yml/badge.svg)](https://github.com/occ-tools/codex-skills-registry/actions/workflows/scorecard.yml)
+[![Validate](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/validate.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/validate.yml)
+[![CodeQL](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/codeql.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/scorecard.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/scorecard.yml)
 [![npm](https://img.shields.io/npm/v/%40wangjiehu%2Fcodex-skills-registry.svg)](https://www.npmjs.com/package/@wangjiehu/codex-skills-registry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: occ-tools/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
+      - uses: Hephaestus-DevKit/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
         with:
           path: .
           command: doctor
@@ -210,7 +210,7 @@ SARIF upload pattern:
 
 ```yaml
 - id: codex-skills
-  uses: occ-tools/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
+  uses: Hephaestus-DevKit/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
   continue-on-error: true
   with:
     path: .
@@ -235,7 +235,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-  - uses: occ-tools/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
+  - uses: Hephaestus-DevKit/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4
     with:
       path: .
       command: pr-comment

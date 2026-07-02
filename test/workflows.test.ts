@@ -189,7 +189,7 @@ jobs:
       "utf8",
     );
     const currentRelease =
-      "occ-tools/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4";
+      "Hephaestus-DevKit/codex-skills-registry@e68aba5aead57f18b51ddb1b0b47294ef6eea8e7 # v1.0.4";
 
     expect(demoWorkflow).toContain(currentRelease);
     expect(demoWorkflow).not.toContain("# v0.6.3");

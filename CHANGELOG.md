@@ -6,7 +6,7 @@
   symlinks or junctions.
 - Add reusable Action smoke coverage for escaped project input paths.
 - Refresh repository metadata, badges, and Action examples for the
-  `occ-tools/codex-skills-registry` GitHub repository.
+  `Hephaestus-DevKit/codex-skills-registry` GitHub repository.
 - Upgrade low-risk `@biomejs/biome` and `smol-toml` patch/minor dependencies.
 
 ## 1.0.4 - 2026-06-20
