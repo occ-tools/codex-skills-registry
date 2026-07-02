@@ -47,12 +47,22 @@ function formatOverview(input) {
     const report = input.report;
     return `
 <section class="hero">
-  <p class="eyebrow">Maintainer automation registry</p>
-  <h1>Codex Skills Registry</h1>
-  <p>Validate Codex Skills, plugin manifests, MCP server configuration, and GitHub Actions workflow risk before maintainers trust automation in CI.</p>
+  <div class="hero-copy">
+    <p class="eyebrow">Maintainer automation registry</p>
+    <h1>Codex Skills Registry</h1>
+    <p>Validate Codex Skills, plugin manifests, MCP server configuration, and GitHub Actions workflow risk before maintainers trust automation in CI.</p>
+  </div>
+  <div class="status-strip" aria-label="Registry health">
+    <span><strong>${report.summary.errors}</strong> errors</span>
+    <span><strong>${report.summary.warnings}</strong> warnings</span>
+    <span><strong>${report.summary.skills + report.summary.mcpServers + report.summary.plugins}</strong> automation entries</span>
+  </div>
 </section>
 <section aria-labelledby="summary-heading">
-  <h2 id="summary-heading">Current Registry Snapshot</h2>
+  <div class="section-heading">
+    <h2 id="summary-heading">Current Registry Snapshot</h2>
+    <p>Compact coverage counts from the current repository scan.</p>
+  </div>
   <div class="metric-grid">
     ${metric("Skills", report.summary.skills)}
     ${metric("MCP Servers", report.summary.mcpServers)}
@@ -63,20 +73,39 @@ function formatOverview(input) {
   </div>
 </section>
 <section aria-labelledby="coverage-heading">
-  <h2 id="coverage-heading">Coverage</h2>
+  <div class="section-heading">
+    <h2 id="coverage-heading">Coverage</h2>
+    <p>Discovered skills, servers, plugins, and workflows.</p>
+  </div>
   <div class="split">
-    ${listSection("Skills", report.skills.map((skill) => `${skill.name} - ${skill.description}`), "No skills discovered.")}
-    ${listSection("MCP Servers", report.mcpServers.map((server) => `${server.name} (${server.transport}) - ${server.sourcePath}`), "No MCP servers discovered.")}
-    ${listSection("Plugins", report.plugins.map((plugin) => `${plugin.name} - ${plugin.sourcePath}`), "No plugin manifests discovered.")}
-    ${listSection("Workflows", report.workflows.map((workflow) => `${workflow.name} - ${workflow.sourcePath}`), "No workflows discovered.")}
+    ${listSection("Skills", report.skills.map((skill) => ({
+        name: skill.name,
+        detail: skill.description,
+    })), "No skills discovered.")}
+    ${listSection("MCP Servers", report.mcpServers.map((server) => ({
+        name: `${server.name} (${server.transport})`,
+        detail: server.sourcePath,
+    })), "No MCP servers discovered.")}
+    ${listSection("Plugins", report.plugins.map((plugin) => ({
+        name: plugin.name,
+        detail: plugin.sourcePath,
+    })), "No plugin manifests discovered.")}
+    ${listSection("Workflows", report.workflows.map((workflow) => ({
+        name: workflow.name,
+        detail: workflow.sourcePath,
+    })), "No workflows discovered.")}
   </div>
 </section>
 <section aria-labelledby="findings-heading">
-  <h2 id="findings-heading">Findings</h2>
+  <div class="section-heading">
+    <h2 id="findings-heading">Findings</h2>
+  </div>
   ${formatFindings(report)}
 </section>
 <section aria-labelledby="next-heading">
-  <h2 id="next-heading">Next Actions</h2>
+  <div class="section-heading">
+    <h2 id="next-heading">Next Actions</h2>
+  </div>
   ${formatList(report.nextActions, "No immediate action required.")}
 </section>
 <p class="timestamp">Generated ${escapeHtml(input.generatedAt ?? new Date().toISOString())}</p>`;
@@ -176,46 +205,63 @@ function formatSitePage(options) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(options.title)}</title>
   <style>
-    :root { color-scheme: light; --ink: #172033; --muted: #5b6475; --line: #d8dee8; --panel: #f7f9fb; --brand: #0f766e; --danger: #b42318; --warn: #a15c00; }
+    :root { color-scheme: light; --ink: #182033; --muted: #647084; --line: #dde3ec; --panel: #f7f8fa; --surface: #ffffff; --brand: #0f766e; --brand-soft: #e6f3f1; --danger: #b42318; --warn: #9a6700; }
     * { box-sizing: border-box; }
-    body { color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.5; margin: 0; background: #ffffff; }
-    header { border-bottom: 1px solid var(--line); }
-    nav, main { margin: 0 auto; max-width: 1120px; padding: 0 20px; }
-    nav { align-items: center; display: flex; min-height: 64px; gap: 24px; }
-    nav a { color: var(--muted); font-weight: 650; text-decoration: none; }
+    body { background: #f5f6f8; color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.5; margin: 0; overflow-x: hidden; }
+    header { background: rgba(255, 255, 255, 0.94); border-bottom: 1px solid var(--line); }
+    nav, main { margin: 0 auto; max-width: 1180px; padding: 0 24px; }
+    nav { align-items: center; display: flex; min-height: 58px; gap: 22px; }
+    nav a { color: var(--muted); font-size: 15px; font-weight: 650; text-decoration: none; }
     nav a[aria-current="page"] { color: var(--brand); }
+    nav a:hover { color: var(--ink); }
     main { padding-bottom: 48px; }
-    .brand { color: var(--ink); font-size: 18px; margin-right: auto; }
-    .hero { border-bottom: 1px solid var(--line); padding: 56px 0 36px; }
-    .hero.compact { padding-bottom: 28px; }
-    .eyebrow { color: var(--brand); font-size: 13px; font-weight: 750; letter-spacing: 0; margin: 0 0 8px; text-transform: uppercase; }
-    h1 { font-size: clamp(34px, 4vw, 56px); line-height: 1.05; letter-spacing: 0; margin: 0 0 16px; max-width: 760px; }
-    h2 { font-size: 22px; letter-spacing: 0; margin: 36px 0 12px; }
-    p { max-width: 760px; }
+    .brand { color: var(--ink); font-size: 16px; font-weight: 750; margin-right: auto; }
+    .hero { align-items: end; border-bottom: 1px solid var(--line); display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; padding: 48px 0 32px; }
+    .hero.compact { display: block; padding-bottom: 26px; }
+    .hero-copy { min-width: 0; }
+    .hero-copy p { color: var(--muted); font-size: 18px; margin-bottom: 0; }
+    .eyebrow { color: var(--brand); font-size: 12px; font-weight: 760; letter-spacing: 0; margin: 0 0 10px; text-transform: uppercase; }
+    h1 { font-size: clamp(34px, 4vw, 48px); line-height: 1.08; letter-spacing: 0; margin: 0 0 14px; max-width: 760px; }
+    h2 { font-size: 21px; letter-spacing: 0; margin: 0; }
+    h3 { font-size: 17px; margin: 0 0 10px; }
+    p { max-width: 760px; overflow-wrap: break-word; }
+    .section-heading { align-items: end; border-top: 1px solid var(--line); display: flex; gap: 16px; justify-content: space-between; margin: 34px 0 14px; padding-top: 22px; }
+    .section-heading p { color: var(--muted); font-size: 14px; margin: 0; text-align: right; }
     code, pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
     code { padding: 2px 5px; }
     pre { overflow-x: auto; padding: 16px; }
     pre code { border: 0; padding: 0; }
-    .metric-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
-    .metric span { color: var(--muted); display: block; font-size: 13px; font-weight: 700; text-transform: uppercase; }
-    .metric strong { display: block; font-size: 32px; margin-top: 6px; }
+    .status-strip { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 0; max-width: 100%; min-width: 280px; }
+    .status-strip span { align-items: baseline; border-bottom: 1px solid var(--line); color: var(--muted); display: flex; gap: 8px; justify-content: space-between; padding: 10px 12px; white-space: nowrap; }
+    .status-strip span:last-child { border-bottom: 0; }
+    .status-strip strong { color: var(--ink); font-size: 20px; }
+    .metric-grid { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; min-width: 0; padding: 15px 16px; }
+    .metric span { color: var(--muted); display: block; font-size: 12px; font-weight: 760; text-transform: uppercase; }
+    .metric strong { display: block; font-size: 30px; line-height: 1; margin-top: 10px; }
     .metric.danger strong { color: var(--danger); }
     .metric.warn strong { color: var(--warn); }
-    .split { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-    .list-block, .rule { border-top: 1px solid var(--line); padding-top: 12px; }
-    .rule-tools { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 24px 0; padding: 16px; }
+    .split { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); }
+    .list-block, .rule { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+    .rule + .rule { margin-top: 12px; }
+    .rule-tools { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin: 24px 0; padding: 16px; }
     .rule-tools h2 { margin-top: 0; }
     .filters { align-items: end; display: grid; gap: 10px 12px; grid-template-columns: auto minmax(180px, 1fr) auto minmax(160px, 220px); }
     input, select { border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: inherit; min-height: 40px; padding: 8px 10px; width: 100%; }
     .rule-count, .empty-state { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
     [hidden] { display: none !important; }
-    ul { margin: 8px 0 0; padding-left: 20px; }
-    li { margin: 6px 0; }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    li { margin: 6px 0; overflow-wrap: break-word; }
+    .item-list { list-style: none; padding-left: 0; }
+    .item-list li { border-top: 1px solid var(--line); margin: 0; padding: 9px 0; }
+    .item-list li:first-child { border-top: 0; padding-top: 0; }
+    .item-title { display: block; font-weight: 720; }
+    .item-detail { color: var(--muted); display: block; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
     .finding.error { color: var(--danger); }
     .finding.warning { color: var(--warn); }
     .timestamp { color: var(--muted); font-size: 13px; margin-top: 40px; }
-    @media (max-width: 640px) { nav { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 16px; padding-top: 16px; } .brand { margin-right: 0; } .filters { grid-template-columns: 1fr; } }
+    @media (max-width: 980px) { .hero { align-items: start; grid-template-columns: 1fr; } .status-strip { min-width: 0; } .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 640px) { nav, main { max-width: 100vw; width: 100vw; } nav { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 16px; padding-top: 16px; } .brand { margin-right: 0; } h1 { font-size: 30px; max-width: 100%; } .hero-copy p { font-size: 16px; max-width: 100%; } .filters, .metric-grid { grid-template-columns: 1fr; } .section-heading { align-items: start; flex-direction: column; } .section-heading p { max-width: 100%; text-align: left; } .status-strip { width: 100%; } .status-strip span { display: grid; grid-template-columns: 44px minmax(0, 1fr); justify-content: start; white-space: normal; } }
   </style>
 </head>
 <body>
@@ -238,7 +284,12 @@ function metric(label, value, tone) {
     return `<div class="metric${tone ? ` ${tone}` : ""}"><span>${escapeHtml(label)}</span><strong>${value}</strong></div>`;
 }
 function listSection(title, values, empty) {
-    return `<section class="list-block"><h3>${escapeHtml(title)}</h3>${formatList(values, empty)}</section>`;
+    if (values.length === 0) {
+        return `<section class="list-block"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(empty)}</p></section>`;
+    }
+    return `<section class="list-block"><h3>${escapeHtml(title)}</h3><ul class="item-list">${values
+        .map((value) => `<li><span class="item-title">${escapeHtml(value.name)}</span><span class="item-detail">${escapeHtml(value.detail)}</span></li>`)
+        .join("")}</ul></section>`;
 }
 function formatFindings(report) {
     if (report.issues.length === 0) {
