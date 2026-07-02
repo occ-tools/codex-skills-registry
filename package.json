@@ -1,5 +1,5 @@
 {
-  "name": "@wangjiehu/codex-skills-registry",
+  "name": "@hepheastus-devkit/codex-skills-registry",
   "version": "1.0.5",
   "description": "Validate, index, and test Codex Skills, plugin manifests, and MCP server configs for open-source maintainer workflows.",
   "type": "module",

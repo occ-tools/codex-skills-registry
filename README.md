@@ -3,7 +3,7 @@
 [![Validate](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/validate.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/validate.yml)
 [![CodeQL](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/codeql.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/scorecard.yml/badge.svg)](https://github.com/Hephaestus-DevKit/codex-skills-registry/actions/workflows/scorecard.yml)
-[![npm](https://img.shields.io/npm/v/%40wangjiehu%2Fcodex-skills-registry.svg)](https://www.npmjs.com/package/@wangjiehu/codex-skills-registry)
+[![npm](https://img.shields.io/npm/v/%40wangjiehu%2Fcodex-skills-registry.svg)](https://www.npmjs.com/package/@hepheastus-devkit/codex-skills-registry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Validate, index, audit, and safely test Codex Skills, plugin manifests, MCP
@@ -37,15 +37,15 @@ Requires Node.js 20 or newer.
 Run without installing:
 
 ```bash
-npx @wangjiehu/codex-skills-registry@latest doctor
-npx @wangjiehu/codex-skills-registry@latest audit --strict
-npx @wangjiehu/codex-skills-registry@latest report --out codex-skills-report.md
+npx @hepheastus-devkit/codex-skills-registry@latest doctor
+npx @hepheastus-devkit/codex-skills-registry@latest audit --strict
+npx @hepheastus-devkit/codex-skills-registry@latest report --out codex-skills-report.md
 ```
 
 Or install the CLI:
 
 ```bash
-npm install -g @wangjiehu/codex-skills-registry
+npm install -g @hepheastus-devkit/codex-skills-registry
 codex-skills doctor
 ```
 
@@ -86,25 +86,25 @@ SARIF, reports, summaries, and sites are written outside that source tree.
 Create a policy file:
 
 ```bash
-npx @wangjiehu/codex-skills-registry@latest init-policy --preset recommended --out .codex-skills-registry.yaml
+npx @hepheastus-devkit/codex-skills-registry@latest init-policy --preset recommended --out .codex-skills-registry.yaml
 ```
 
 Run the local review:
 
 ```bash
-npx @wangjiehu/codex-skills-registry@latest doctor --policy .codex-skills-registry.yaml
+npx @hepheastus-devkit/codex-skills-registry@latest doctor --policy .codex-skills-registry.yaml
 ```
 
 Generate a report:
 
 ```bash
-npx @wangjiehu/codex-skills-registry@latest report --out codex-skills-report.md
+npx @hepheastus-devkit/codex-skills-registry@latest report --out codex-skills-report.md
 ```
 
 Export SARIF for Code Scanning:
 
 ```bash
-npx @wangjiehu/codex-skills-registry@latest doctor --format sarif > codex-skills-registry.sarif
+npx @hepheastus-devkit/codex-skills-registry@latest doctor --format sarif > codex-skills-registry.sarif
 ```
 
 ## CLI Commands
@@ -252,7 +252,7 @@ workflow; never execute or source the downloaded artifact. See
 The SDK is ESM-only. CommonJS consumers should load it with dynamic `import()`.
 
 ```ts
-import { SkillsRegistry, executeMockSkill } from "@wangjiehu/codex-skills-registry";
+import { SkillsRegistry, executeMockSkill } from "@hepheastus-devkit/codex-skills-registry";
 
 const registry = await SkillsRegistry.load({ cwd: process.cwd() });
 console.log(registry.formatSkillsTable());
@@ -311,7 +311,7 @@ for public release readiness.
 
 ## Release
 
-The package is published as `@wangjiehu/codex-skills-registry`.
+The package is published as `@hepheastus-devkit/codex-skills-registry`.
 
 Automated release flow:
 
